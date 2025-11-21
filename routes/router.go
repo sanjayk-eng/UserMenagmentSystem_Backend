@@ -15,10 +15,11 @@ func SetupRoutes(r *gin.Engine, h *controllers.HandlerFunc) {
 	}
 
 	// ----------------- Employees -----------------
-	employees := r.Group("/api/employees")
-	// employees.Use(middleware.AuthMiddleware()) // Protect employee routes
+	employees := r.Group("/api/employee")
+	employees.Use(middleware.AuthMiddleware(h)) // Protect employee routes
 	{
-		employees.GET("", h.GetEmployees)                        // GET /api/employees
+		employees.GET("", h.GetEmployee)                         // GET get all employee by Admin ,SuperAdmin and HR
+		employees.POST("", h.CreateEmployee)                     // Add Employee by Admin ,SuperAdmin and HR
 		employees.PATCH("/:id/role", h.UpdateEmployeeRole)       // PATCH /api/employees/:id/role
 		employees.PATCH("/:id/manager", h.UpdateEmployeeManager) // PATCH /api/employees/:id/manager
 		employees.GET("/:id/reports", h.GetEmployeeReports)      // GET /api/employees/:id/reports
@@ -26,24 +27,26 @@ func SetupRoutes(r *gin.Engine, h *controllers.HandlerFunc) {
 
 	// ----------------- Leaves -----------------
 	leaves := r.Group("/api/leaves")
-	leaves.Use(middleware.AuthMiddleware())
+	leaves.Use(middleware.AuthMiddleware(h))
 	{
-		leaves.POST("/apply", h.ApplyLeave)        // Employee applies leave
+		leaves.POST("/apply", h.ApplyLeave)
+		leaves.GET("/", h.GetAllLeavePolicies)     //show all leave policy
 		leaves.POST("/admin-add", h.AdminAddLeave) // Admin adds leave
 		leaves.POST("/:id/action", h.ActionLeave)  // Approve/Reject leave
 	}
 
 	// ----------------- Leave Balances -----------------
 	leaveBalances := r.Group("/api/leave-balances")
-	leaveBalances.Use(middleware.AuthMiddleware())
+	leaveBalances.Use(middleware.AuthMiddleware(h))
 	{
+
 		leaveBalances.GET("/employee/:id", h.GetLeaveBalances)  // GET /api/employees/:id/leave-balances
 		leaveBalances.POST("/:id/adjust", h.AdjustLeaveBalance) // POST /api/leave-balances/:id/adjust
 	}
 
 	// ----------------- Payroll -----------------
 	payroll := r.Group("/api/payroll")
-	payroll.Use(middleware.AuthMiddleware())
+	payroll.Use(middleware.AuthMiddleware(h))
 	{
 		payroll.POST("/run", h.RunPayroll)                // POST /api/payroll/run
 		payroll.POST("/:id/finalize", h.FinalizePayroll)  // POST /api/payroll/:id/finalize
@@ -52,7 +55,7 @@ func SetupRoutes(r *gin.Engine, h *controllers.HandlerFunc) {
 
 	// ----------------- Settings -----------------
 	settings := r.Group("/api/settings")
-	settings.Use(middleware.AuthMiddleware())
+	settings.Use(middleware.AuthMiddleware(h))
 	{
 		settings.GET("/company", h.GetCompanySettings)
 		settings.POST("/company", h.UpdateCompanySettings)

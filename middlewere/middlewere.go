@@ -2,30 +2,55 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sanjayk-eng/UserMenagmentSystem_Backend/controllers"
+	"github.com/sanjayk-eng/UserMenagmentSystem_Backend/utils"
 )
 
-// AuthMiddleware is a placeholder for authentication
-func AuthMiddleware() gin.HandlerFunc {
+// AuthMiddleware verifies Bearer JWT Token
+func AuthMiddleware(h *controllers.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 
-		// -----------------------------
-		// Example: Check for Authorization header
-		// -----------------------------
+		// 1. Read Authorization header
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized: missing Authorization header"})
+			utils.RespondWithError(c, http.StatusUnauthorized, "Missing Authorization header")
 			c.Abort()
 			return
 		}
 
-		// TODO: Validate token or session here
-		// Example:
-		// token := strings.TrimPrefix(authHeader, "Bearer ")
-		// validateToken(token)
+		// 2. Allow both:
+		//    - "Bearer <token>"
+		//    - "<token>"
+		var tokenString string
 
-		// Continue to the handler
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+
+		tokenString = strings.TrimSpace(tokenString)
+
+		if tokenString == "" {
+			utils.RespondWithError(c, http.StatusUnauthorized, "Token missing")
+			c.Abort()
+			return
+		}
+
+		// 3. Validate JWT token
+		claims, err := utils.ValidateToken(tokenString, h.Env.SERACT_KEY)
+		if err != nil {
+			utils.RespondWithError(c, http.StatusUnauthorized, "Invalid or expired token"+err.Error())
+			c.Abort()
+			return
+		}
+
+		// 4. Store useful info in context
+		c.Set("user_id", claims.UserID)
+		c.Set("role", claims.UserRole)
+
+		// Continue request
 		c.Next()
 	}
 }

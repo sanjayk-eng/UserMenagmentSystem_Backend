@@ -2,14 +2,21 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
 )
 
+type CustomClaims struct {
+	UserID   string `json:"user_id"`
+	UserRole string `json:"user_role"`
+	jwt.RegisteredClaims
+}
+
 // -------------------------
-// 1️⃣ Bcrypt functions
+// 1️ Bcrypt functions
 // -------------------------
 
 // HashPassword hashes a plain password using bcrypt
@@ -24,18 +31,23 @@ func HashPassword(password string) (string, error) {
 // CheckPassword compares a plain password with hashed password
 func CheckPassword(password, hashed string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hashed), []byte(password))
+	fmt.Println("----------------", err)
 	return err == nil
 }
 
 // -------------------------
-// 2️⃣ JWT functions
+// 2️ JWT functions
 // -------------------------
 
 // GenerateToken generates a JWT token with userID payload
-func GenerateToken(userID string, jwtKey string) (string, error) {
-	claims := jwt.MapClaims{
-		"user_id": userID,
-		"exp":     time.Now().Add(time.Hour * 24).Unix(), // 24h expiry
+func GenerateToken(userID string, userRole string, jwtKey string) (string, error) {
+	claims := CustomClaims{
+		UserID:   userID,
+		UserRole: userRole,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -43,23 +55,22 @@ func GenerateToken(userID string, jwtKey string) (string, error) {
 }
 
 // ValidateToken validates a JWT token and returns userID
-func ValidateToken(tokenString string, jwtKey string) (string, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		// Validate signing method
+func ValidateToken(tokenString string, jwtKey string) (*CustomClaims, error) {
+	claims := &CustomClaims{}
+
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("invalid signing method")
 		}
 		return []byte(jwtKey), nil
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		if userID, ok := claims["user_id"].(string); ok {
-			return userID, nil
-		}
-		return "", errors.New("user_id not found in token")
+	if !token.Valid {
+		return nil, errors.New("invalid token")
 	}
-	return "", errors.New("invalid token")
+
+	return claims, nil
 }

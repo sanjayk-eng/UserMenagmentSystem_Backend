@@ -3,6 +3,7 @@ package models
 import (
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 )
 
@@ -13,20 +14,36 @@ type RoleInput struct {
 
 // ----------------- EMPLOYEE -----------------
 type EmployeeInput struct {
+	ID          *uuid.UUID `json:"id,omitempty"` // optional UUID
 	FullName    string     `json:"full_name" validate:"required"`
-	Email       string     `json:"email" validate:"required,email,zenithive_email"`
-	RoleID      int        `json:"role_id" validate:"required"`
+	Email       string     `json:"email" validate:"required,email"`
+	Role        string     `json:"role" validate:"required"`
 	Password    string     `json:"password" validate:"required"`
-	ManagerID   *uuid.UUID `json:"manager_id,omitempty"`
-	Salary      *float64   `json:"salary,omitempty"`
-	JoiningDate *time.Time `json:"joining_date,omitempty"`
+	ManagerID   *uuid.UUID `json:"manager_id,omitempty"`   // optional UUID
+	Salary      *float64   `json:"salary,omitempty"`       // optional
+	JoiningDate *time.Time `json:"joining_date,omitempty"` // optional
+	Status      *string    `json:"status,omitempty"`       // optional, new field
+	CreatedAt   *time.Time `json:"created_at,omitempty"`   // optional
+	UpdatedAt   *time.Time `json:"updated_at,omitempty"`   // optional
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`   // optional
 }
 
 // ----------------- LEAVE TYPE -----------------
+type LeaveType struct {
+	ID                 int    `json:"id" db:"id"`
+	Name               string `json:"name" db:"name"`
+	IsPaid             bool   `json:"is_paid" db:"is_paid"`
+	DefaultEntitlement int    `json:"default_entitlement" db:"default_entitlement"`
+	// LeaveCount         int       `json:"leave_count" db:"leave_count"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+}
+
 type LeaveTypeInput struct {
 	Name               string `json:"name" validate:"required"`
 	IsPaid             *bool  `json:"is_paid,omitempty"`
 	DefaultEntitlement *int   `json:"default_entitlement,omitempty"`
+	LeaveCount         *int   `json:"leave_count,omitempty" validate:"omitempty,gt=0"`
 }
 
 // ----------------- LEAVE -----------------
@@ -81,6 +98,12 @@ type PayslipInput struct {
 	PdfPath         *string   `json:"pdf_path,omitempty"`
 }
 
+// -------------------Loing input-----------------------
+type LoginInput struct {
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=6"`
+}
+
 // ----------------- AUDIT -----------------
 type AuditInput struct {
 	ActorID  uuid.UUID  `json:"actor_id" validate:"required"`
@@ -88,4 +111,10 @@ type AuditInput struct {
 	Entity   *string    `json:"entity,omitempty"`
 	EntityID *uuid.UUID `json:"entity_id,omitempty"`
 	Metadata *string    `json:"metadata,omitempty"` // JSON as string
+}
+
+var Validate *validator.Validate
+
+func InitValidator() {
+	Validate = validator.New()
 }
