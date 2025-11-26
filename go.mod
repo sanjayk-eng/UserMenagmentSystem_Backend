@@ -1,6 +1,6 @@
 module github.com/sanjayk-eng/UserMenagmentSystem_Backend
 
-go 1.25.1
+go 1.25
 
 require (
 	github.com/gin-contrib/cors v1.7.6
