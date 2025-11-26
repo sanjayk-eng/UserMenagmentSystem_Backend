@@ -56,6 +56,20 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 		utils.RespondWithError(c, http.StatusForbidden, "Only employees can apply leave")
 		return
 	}
+	var empStatus string
+	err = h.Query.DB.Get(&empStatus, `
+    SELECT status FROM Tbl_Employee WHERE id=$1
+`, employeeID)
+
+	if err != nil {
+		utils.RespondWithError(c, 500, "Failed to verify employee status")
+		return
+	}
+
+	if empStatus == "deactive" {
+		utils.RespondWithError(c, 403, "Your account is deactivated. You cannot apply leave")
+		return
+	}
 
 	// -------------------------------------------------
 	// 2️ Bind Input JSON
@@ -66,6 +80,23 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 		return
 	}
 	input.EmployeeID = employeeID
+
+	// -------------------------------------------------
+	//  Validate Start & End Date
+	// -------------------------------------------------
+	today := time.Now().Truncate(24 * time.Hour)
+
+	// Start date cannot be in the past
+	if input.StartDate.Before(today) {
+		utils.RespondWithError(c, 400, "Start date cannot be earlier than today's date")
+		return
+	}
+
+	// End date cannot be earlier than start date
+	if input.EndDate.Before(input.StartDate) {
+		utils.RespondWithError(c, 400, "End date cannot be earlier than start date")
+		return
+	}
 
 	// -------------------------------------------------
 	// 3️ Start Transaction (IMPORTANT)

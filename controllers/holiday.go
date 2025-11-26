@@ -41,11 +41,11 @@ func (s *HandlerFunc) AddHoliday(c *gin.Context) {
 
 // GetHolidays returns all holidays
 func (s *HandlerFunc) GetHolidays(c *gin.Context) {
-	role, _ := c.Get("role")
-	if role.(string) != "SUPERADMIN" {
-		utils.RespondWithError(c, http.StatusUnauthorized, "not permitted")
-		return
-	}
+	// role, _ := c.Get("role")
+	// if role.(string) != "SUPERADMIN" {
+	// 	utils.RespondWithError(c, http.StatusUnauthorized, "not permitted")
+	// 	return
+	// }
 
 	holidays, err := s.Query.GetAllHolidays()
 	if err != nil {

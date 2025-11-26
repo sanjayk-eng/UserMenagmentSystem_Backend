@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ type EmployeeAuthData struct {
 	Email    string `db:"email"`
 	Password string `db:"password"`
 	Role     string `db:"role"`
+	Status   string `db:"status"`
 }
 
 type Repository struct {
@@ -25,25 +27,27 @@ func InitializeRepo(db *sqlx.DB) *Repository {
 		DB: db,
 	}
 }
-
 func (r *Repository) GetEmployeeByEmail(email string) (EmployeeAuthData, error) {
 	var emp EmployeeAuthData
+
 	query := `
 		SELECT 
 			e.id,
 			e.email,
 			e.password,
-			r.type AS role
+			r.type AS role,
+			e.status
 		FROM Tbl_Employee e
 		JOIN Tbl_Role r ON e.role_id = r.id
 		WHERE e.email = $1
 		LIMIT 1;
 	`
+
 	err := r.DB.Get(&emp, query, email)
 	return emp, err
 }
 
-func (r *Repository) GetAllEmployees() (*sql.Rows, error) {
+func (r *Repository) GetAllEmployees() ([]models.EmployeeInput, error) {
 	query := `
         SELECT 
             e.id, e.full_name, e.email, e.status,
@@ -54,7 +58,82 @@ func (r *Repository) GetAllEmployees() (*sql.Rows, error) {
         JOIN Tbl_Role r ON e.role_id = r.id
         ORDER BY e.full_name
     `
-	return r.DB.Query(query)
+
+	rows, err := r.DB.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var employees []models.EmployeeInput
+
+	for rows.Next() {
+		var emp models.EmployeeInput
+
+		err := rows.Scan(
+			&emp.ID,
+			&emp.FullName,
+			&emp.Email,
+			&emp.Status,
+			&emp.Role,
+			&emp.Password,
+			&emp.ManagerID,
+			&emp.Salary,
+			&emp.JoiningDate,
+			&emp.CreatedAt,
+			&emp.UpdatedAt,
+			&emp.DeletedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// ------- Fetch manager name if exists -------
+		if emp.ManagerID != nil {
+			var mName string
+			err := r.DB.QueryRow(`
+                SELECT full_name FROM Tbl_Employee WHERE id = $1
+            `, emp.ManagerID).Scan(&mName)
+
+			if err == nil {
+				emp.ManagerName = &mName
+			}
+		}
+
+		employees = append(employees, emp)
+	}
+
+	return employees, nil
+}
+
+func (r *Repository) DeleteEmployeeStatus(id uuid.UUID) (string, error) {
+
+	// Get current status
+	var currentStatus string
+	err := r.DB.QueryRow(`
+        SELECT status FROM Tbl_Employee WHERE id = $1
+    `, id).Scan(&currentStatus)
+	if err != nil {
+		return "", err
+	}
+
+	// Toggle logic
+	newStatus := "active"
+	if currentStatus == "active" {
+		newStatus = "deactive"
+	}
+
+	// Update
+	_, err = r.DB.Exec(`
+        UPDATE Tbl_Employee 
+        SET status = $1, updated_at = NOW()
+        WHERE id = $2
+    `, newStatus, id)
+	if err != nil {
+		return "", err
+	}
+
+	return newStatus, nil
 }
 
 // ------------------ CHECK EMAIL EXISTS ------------------
@@ -99,7 +178,7 @@ func (r *Repository) GetEmployeeCurrentRole(empID string) (string, error) {
 }
 
 // ------------------ UPDATE ROLE ------------------
-func (r *Repository) UpdateEmployeeRole(empID string, newRole string) (string, error) {
+func (r *Repository) UpdateEmployeeRole(empID uuid.UUID, newRole string) (string, error) {
 	var id string
 	query := `
         UPDATE TBL_EMPLOYEE
@@ -151,6 +230,7 @@ func (r *Repository) AddHoliday(name string, date time.Time, typ string) (string
 func (r *Repository) GetAllHolidays() ([]models.Holiday, error) {
 	rows, err := r.DB.Queryx(`SELECT id, name, date, day, type, created_at, updated_at FROM Tbl_Holiday ORDER BY date`)
 	if err != nil {
+		fmt.Println("error", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -185,4 +265,73 @@ func (q *Repository) GetLeaveTypeByLeaveID(leaveID uuid.UUID) (int, error) {
 	}
 
 	return leaveTypeID, nil
+}
+
+func (r *Repository) GetEmployeeCurrentRoleAndManagerStatus(empID uuid.UUID) (string, bool, error) {
+	var role string
+	var count int
+	query := `
+	SELECT r.type, 
+	       (SELECT COUNT(*) FROM Tbl_Employee e2 WHERE e2.manager_id=e.id) AS sub_count
+	FROM Tbl_Employee e
+	JOIN Tbl_Role r ON e.role_id=r.id
+	WHERE e.id=$1
+	`
+	err := r.DB.QueryRow(query, empID).Scan(&role, &count)
+	if err != nil {
+		return "", false, err
+	}
+	return role, count > 0, nil
+}
+
+func (r *Repository) GetAllFinalizedPayslips() (*sql.Rows, error) {
+	query := `
+	SELECT 
+	    p.id AS payslip_id,
+	    e.id AS employee_id,
+	    e.full_name,
+	    e.email,
+	    pr.month,
+	    pr.year,
+	    p.basic_salary,
+	    p.working_days,
+	    p.absent_days,
+	    p.deduction_amount,
+	    p.net_salary,
+	    COALESCE(p.pdf_path, '') AS pdf_path,
+	    CONCAT('₹', p.basic_salary, ' - ₹', p.deduction_amount, ' = ₹', p.net_salary) AS calculation,
+	    p.created_at
+	FROM Tbl_Payslip p
+	JOIN Tbl_Employee e ON p.employee_id = e.id
+	JOIN Tbl_Payroll_Run pr ON pr.id = p.payroll_run_id
+	WHERE pr.status = 'FINALIZED'
+	ORDER BY pr.year DESC, pr.month DESC, e.full_name ASC;
+	`
+	return r.DB.Query(query)
+}
+
+func (r *Repository) GetFinalizedPayslipsByEmployee(id uuid.UUID) (*sql.Rows, error) {
+	query := `
+	SELECT 
+	    p.id AS payslip_id,
+	    e.id AS employee_id,
+	    e.full_name,
+	    e.email,
+	    pr.month,
+	    pr.year,
+	    p.basic_salary,
+	    p.working_days,
+	    p.absent_days,
+	    p.deduction_amount,
+	    p.net_salary,
+	    COALESCE(p.pdf_path, '') AS pdf_path,
+	    CONCAT('₹', p.basic_salary, ' - ₹', p.deduction_amount, ' = ₹', p.net_salary) AS calculation,
+	    p.created_at
+	FROM Tbl_Payslip p
+	JOIN Tbl_Employee e ON p.employee_id = e.id
+	JOIN Tbl_Payroll_Run pr ON pr.id = p.payroll_run_id
+	WHERE pr.status = 'FINALIZED' AND e.id = $1
+	ORDER BY pr.year DESC, pr.month DESC;
+	`
+	return r.DB.Query(query, id)
 }

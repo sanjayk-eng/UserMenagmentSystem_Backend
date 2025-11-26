@@ -30,7 +30,7 @@ func main() {
 	fmt.Printf("Starting server on port %s\n", env.APP_PORT)
 
 	// Start the Gin server
-	if err := r.Run("0.0.0.0:" + env.APP_PORT); err != nil {
+	if err := r.Run(":" + env.APP_PORT); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }

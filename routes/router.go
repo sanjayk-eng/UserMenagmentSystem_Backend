@@ -34,8 +34,9 @@ func SetupRoutes(r *gin.Engine, h *controllers.HandlerFunc) {
 		//employees.GET("/:id", h.GetEmployeeByID)                 // Get employee details (Self/Manager/Admin)
 		employees.POST("/", h.CreateEmployee) // Create employee (SUPER_ADMIN, ADMIN/HR)
 		//employees.PATCH("/:id", h.UpdateEmployeeInfo)            // Update employee info (SUPER_ADMIN, ADMIN/HR)
-		employees.PATCH("/:id/role", h.UpdateEmployeeRole)       // Change employee role (SUPER_ADMIN, ADMIN/HR)
-		employees.PATCH("/:id/manager", h.UpdateEmployeeManager) // Set/change manager (SUPER_ADMIN, ADMIN/HR)
+		employees.PATCH("/:id/role", h.UpdateEmployeeRole) // Change employee role (SUPER_ADMIN, ADMIN/HR)
+		employees.PATCH("/:id/manager", h.UpdateEmployeeManager)
+		employees.PUT("/deactivate/:id", h.DeleteEmployeeStatus) // Set/change manager (SUPER_ADMIN, ADMIN/HR)
 		employees.GET("/:id/reports", h.GetEmployeeReports)      // Get direct reports (Self/Manager/Admin)
 	}
 
@@ -45,8 +46,9 @@ func SetupRoutes(r *gin.Engine, h *controllers.HandlerFunc) {
 	{
 		leaves.POST("/apply", h.ApplyLeave) // Employee applies for leave
 		leaves.POST("/admin-add", h.AdminAddLeave)
-		leaves.POST("/admin-add/policy", h.AdminAddLeavePolicy) // Admin/Manager adds leave on behalf of employee
-		leaves.POST("/:id/action", h.ActionLeave)               // Approve/Reject leave
+		leaves.POST("/admin-add/policy", h.AdminAddLeavePolicy)
+		leaves.GET("/Get-All-Leave-Policy", h.GetAllLeavePolicies) // Admin/Manager adds leave on behalf of employee
+		leaves.POST("/:id/action", h.ActionLeave)                  // Approve/Reject leave
 		leaves.GET("/all", h.GetAllLeaves)
 		//leaves.GET("/:id", h.GetLeaveByID)         // Get leave details
 	}
@@ -71,6 +73,8 @@ func SetupRoutes(r *gin.Engine, h *controllers.HandlerFunc) {
 		// Finalize payroll for a specific payroll run ID
 		payroll.POST("/:id/finalize", h.FinalizePayroll)
 		// POST /api/payroll/{id}/finalize
+
+		payroll.GET("/payslip", h.GetFinalizedPayslips)
 
 		// Download payslip PDF for a specific employee payslip ID
 		payroll.GET("/payslips/:id/pdf", h.GetPayslipPDF)

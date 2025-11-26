@@ -14,6 +14,8 @@ type ENV struct {
 	APP_PORT        string
 	SERACT_KEY      string
 	FRONTEND_SERVER string
+	SMTP_PORT       string
+	SMTP_HOST       string
 }
 
 var (
@@ -43,6 +45,8 @@ func LoadENV() *ENV {
 			APP_PORT:        os.Getenv("APP_PORT"), // Optional: server port
 			SERACT_KEY:      os.Getenv("SECRATE_KEY"),
 			FRONTEND_SERVER: os.Getenv("F_SERVER"),
+			SMTP_PORT:       os.Getenv("SMTP_PORT"),
+			SMTP_HOST:       os.Getenv("SMTP_HOST"),
 		}
 	})
 	log.Println("✅ Environment variables loaded successfully")

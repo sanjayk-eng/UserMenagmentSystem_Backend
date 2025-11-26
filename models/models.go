@@ -25,7 +25,8 @@ type EmployeeInput struct {
 	Status      *string    `json:"status,omitempty"`       // optional, new field
 	CreatedAt   *time.Time `json:"created_at,omitempty"`   // optional
 	UpdatedAt   *time.Time `json:"updated_at,omitempty"`   // optional
-	DeletedAt   *time.Time `json:"deleted_at,omitempty"`   // optional
+	DeletedAt   *time.Time `json:"deleted_at,omitempty"`
+	ManagerName *string    `json:"manager_name,omitempty"` // optional
 }
 
 // ----------------- LEAVE TYPE -----------------
@@ -133,13 +134,30 @@ type AuditInput struct {
 }
 
 type Holiday struct {
-	ID        uuid.UUID `json:"id" db:"id"`
+	ID        int64     `json:"id" db:"id"`
 	Name      string    `json:"name" db:"name" binding:"required"`
 	Date      time.Time `json:"date" db:"date" binding:"required"` // Input by user
 	Day       string    `json:"day" db:"day"`                      // Automatically calculated
 	Type      string    `json:"type" db:"type"`                    // Default "HOLIDAY"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+}
+
+type FullPayslipResponse struct {
+	PayslipID       uuid.UUID `json:"payslip_id"`
+	EmployeeID      uuid.UUID `json:"employee_id"`
+	FullName        string    `json:"full_name"`
+	Email           string    `json:"email"`
+	Month           int       `json:"month"` // from Payroll_Run
+	Year            int       `json:"year"`
+	BasicSalary     float64   `json:"basic_salary"`
+	WorkingDays     int       `json:"working_days"`
+	AbsentDays      int       `json:"absent_days"`
+	DeductionAmount float64   `json:"deduction_amount"`
+	NetSalary       float64   `json:"net_salary"`
+	PDFPath         string    `json:"pdf_path"`
+	CalculationText string    `json:"calculation"`
+	CreatedAt       string    `json:"created_at"`
 }
 
 var Validate *validator.Validate
