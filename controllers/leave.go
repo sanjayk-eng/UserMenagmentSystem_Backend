@@ -81,9 +81,21 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 
 	input.EmployeeID = employeeID
 
-	// Validate reason
+	// Validate reason - Enhanced validation
 	if input.Reason == "" {
-		utils.RespondWithError(c, 400, "Leave reason is required")
+		utils.RespondWithError(c, 400, "Leave reason is required. Please provide a valid reason for your leave request")
+		return
+	}
+	
+	// Trim whitespace and check minimum length
+	input.Reason = strings.TrimSpace(input.Reason)
+	if len(input.Reason) < 10 {
+		utils.RespondWithError(c, 400, "Leave reason must be at least 10 characters long. Please provide a detailed reason")
+		return
+	}
+	
+	if len(input.Reason) > 500 {
+		utils.RespondWithError(c, 400, "Leave reason is too long. Maximum 500 characters allowed")
 		return
 	}
 
@@ -172,22 +184,39 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 		return
 	}
 
-	// Overlapping Leave Check
-	var overlap int
-	err = tx.Get(&overlap, `
-		SELECT COUNT(*) FROM Tbl_Leave
-		WHERE employee_id=$1 
-		AND status IN ('Pending','Approved')
-		AND start_date <= $2 
-		AND end_date >= $3
+	// Overlapping Leave Check - Only check Pending and Approved leaves
+	var overlappingLeaves []struct {
+		ID        uuid.UUID `db:"id"`
+		LeaveType string    `db:"leave_type"`
+		StartDate time.Time `db:"start_date"`
+		EndDate   time.Time `db:"end_date"`
+		Status    string    `db:"status"`
+	}
+	
+	err = tx.Select(&overlappingLeaves, `
+		SELECT l.id, lt.name as leave_type, l.start_date, l.end_date, l.status
+		FROM Tbl_Leave l
+		JOIN Tbl_Leave_type lt ON l.leave_type_id = lt.id
+		WHERE l.employee_id=$1 
+		AND l.status IN ('Pending','APPROVED')
+		AND l.start_date <= $2 
+		AND l.end_date >= $3
 	`, employeeID, input.EndDate, input.StartDate)
 
 	if err != nil {
 		utils.RespondWithError(c, 500, "Failed to check overlapping leave")
 		return
 	}
-	if overlap > 0 {
-		utils.RespondWithError(c, 400, "Overlapping leave exists")
+	
+	if len(overlappingLeaves) > 0 {
+		// Build detailed error message
+		overlap := overlappingLeaves[0]
+		utils.RespondWithError(c, 400, 
+			fmt.Sprintf("Overlapping leave exists: %s from %s to %s (Status: %s). Please cancel or modify the existing leave first",
+				overlap.LeaveType,
+				overlap.StartDate.Format("2006-01-02"),
+				overlap.EndDate.Format("2006-01-02"),
+				overlap.Status))
 		return
 	}
 
@@ -390,7 +419,26 @@ func (s *HandlerFunc) ActionLeave(c *gin.Context) {
 		return
 	}
 
-	// APPROVE
+	// APPROVE - First check balance
+	var currentBalance float64
+	err = tx.Get(&currentBalance, `
+		SELECT closing 
+		FROM Tbl_Leave_balance 
+		WHERE employee_id=$1 AND leave_type_id=$2 
+		AND year = EXTRACT(YEAR FROM CURRENT_DATE)
+	`, leave.EmployeeID, leave.LeaveTypeID)
+	
+	if err != nil {
+		utils.RespondWithError(c, 500, "Failed to fetch leave balance: "+err.Error())
+		return
+	}
+
+	// Check if sufficient balance exists
+	if currentBalance < leave.Days {
+		utils.RespondWithError(c, 400, fmt.Sprintf("Cannot approve: Insufficient leave balance. Available: %.1f days, Required: %.1f days", currentBalance, leave.Days))
+		return
+	}
+
 	_, err = tx.Exec(`UPDATE Tbl_Leave SET status='APPROVED', approved_by=$2, updated_at=NOW() WHERE id=$1`, leaveID, approverID)
 	if err != nil {
 		utils.RespondWithError(c, 500, "Failed to approve leave: "+err.Error())
@@ -444,6 +492,10 @@ func CalculateWorkingDays(tx *sqlx.Tx, start, end time.Time) (float64, error) {
 		return 0, fmt.Errorf("end date cannot be before start date")
 	}
 
+	// Normalize dates to midnight UTC to avoid timezone issues
+	start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
+	end = time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.UTC)
+
 	// 2️ Fetch holidays within range
 	var holidays []time.Time
 	err := tx.Select(&holidays,
@@ -463,21 +515,29 @@ func CalculateWorkingDays(tx *sqlx.Tx, start, end time.Time) (float64, error) {
 
 	// 3️ Count working days
 	workingDays := 0
+	var workingDaysList []string // For debugging
+
 	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
+		dayStr := d.Format("2006-01-02")
+		weekday := d.Weekday()
 
 		// Skip Saturday and Sunday
-		if d.Weekday() == time.Saturday || d.Weekday() == time.Sunday {
+		if weekday == time.Saturday || weekday == time.Sunday {
+			fmt.Printf("DEBUG: Skipping weekend: %s (%s)\n", dayStr, weekday)
 			continue
 		}
 
 		// Skip holidays
-		if holidayMap[d.Format("2006-01-02")] {
+		if holidayMap[dayStr] {
+			fmt.Printf("DEBUG: Skipping holiday: %s\n", dayStr)
 			continue
 		}
 
 		workingDays++
+		workingDaysList = append(workingDaysList, fmt.Sprintf("%s (%s)", dayStr, weekday))
 	}
 
+	fmt.Printf("DEBUG: Working days calculated: %d - Days: %v\n", workingDays, workingDaysList)
 	return float64(workingDays), nil
 }
 func (h *HandlerFunc) GetAllLeaves(c *gin.Context) {
@@ -592,6 +652,23 @@ func (h *HandlerFunc) AdminAddLeave(c *gin.Context) {
 		return
 	}
 
+	// Validate reason - Enhanced validation
+	if input.Reason == "" {
+		utils.RespondWithError(c, http.StatusBadRequest, "Leave reason is required. Please provide a valid reason for this leave")
+		return
+	}
+	
+	input.Reason = strings.TrimSpace(input.Reason)
+	if len(input.Reason) < 10 {
+		utils.RespondWithError(c, http.StatusBadRequest, "Leave reason must be at least 10 characters long. Please provide a detailed reason")
+		return
+	}
+	
+	if len(input.Reason) > 500 {
+		utils.RespondWithError(c, http.StatusBadRequest, "Leave reason is too long. Maximum 500 characters allowed")
+		return
+	}
+
 	// ------------------------------
 	// 5. Manager can only add leave for their team (if not self)
 	// ------------------------------
@@ -680,15 +757,23 @@ func (h *HandlerFunc) AdminAddLeave(c *gin.Context) {
 	}
 
 	// ------------------------------
+	// 9.5. Check sufficient balance
+	// ------------------------------
+	if balance < leaveDays {
+		utils.RespondWithError(c, http.StatusBadRequest, fmt.Sprintf("Insufficient leave balance. Available: %.1f days, Requested: %.1f days", balance, leaveDays))
+		return
+	}
+
+	// ------------------------------
 	// 10. Insert leave (status APPROVED)
 	// ------------------------------
 	var leaveID uuid.UUID
 	err = tx.QueryRow(`
 		INSERT INTO Tbl_Leave 
-		(employee_id, leave_type_id, start_date, end_date, days, status, applied_by, approved_by, created_at)
-		VALUES ($1, $2, $3, $4, $5, 'APPROVED', $6, $6, NOW())
+		(employee_id, leave_type_id, start_date, end_date, days, status, reason, applied_by, approved_by, created_at)
+		VALUES ($1, $2, $3, $4, $5, 'APPROVED', $6, $7, $7, NOW())
 		RETURNING id
-	`, input.EmployeeID, input.LeaveTypeID, input.StartDate, input.EndDate, leaveDays, currentUserID).
+	`, input.EmployeeID, input.LeaveTypeID, input.StartDate, input.EndDate, leaveDays, input.Reason, currentUserID).
 		Scan(&leaveID)
 	if err != nil {
 		utils.RespondWithError(c, http.StatusInternalServerError, "Failed to insert leave: "+err.Error())
@@ -755,5 +840,199 @@ func (h *HandlerFunc) AdminAddLeave(c *gin.Context) {
 		"message":  "Leave added successfully",
 		"leave_id": leaveID,
 		"days":     leaveDays,
+	})
+}
+
+
+// CancelLeave - DELETE /api/leaves/:id/cancel
+// Allows employees to cancel their own pending leaves
+func (h *HandlerFunc) CancelLeave(c *gin.Context) {
+	// Get user info from middleware
+	userIDRaw, _ := c.Get("user_id")
+	userID, _ := uuid.Parse(userIDRaw.(string))
+	
+	roleRaw, _ := c.Get("role")
+	role := roleRaw.(string)
+
+	// Parse leave ID from URL
+	leaveID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		utils.RespondWithError(c, 400, "Invalid leave ID")
+		return
+	}
+
+	// Start transaction
+	tx, err := h.Query.DB.Beginx()
+	if err != nil {
+		utils.RespondWithError(c, 500, "Failed to start transaction")
+		return
+	}
+	defer tx.Rollback()
+
+	// Fetch leave details
+	var leave Leave
+	err = tx.Get(&leave, `SELECT * FROM Tbl_Leave WHERE id=$1 FOR UPDATE`, leaveID)
+	if err != nil {
+		utils.RespondWithError(c, 404, "Leave not found")
+		return
+	}
+
+	// Permission check - employees can only cancel their own leaves
+	if role == "EMPLOYEE" && leave.EmployeeID != userID {
+		utils.RespondWithError(c, 403, "You can only cancel your own leave applications")
+		return
+	}
+
+	// Check if leave can be cancelled
+	if leave.Status == "APPROVED" {
+		utils.RespondWithError(c, 400, "Cannot cancel approved leave. Please contact your manager or admin")
+		return
+	}
+
+	if leave.Status == "REJECTED" {
+		utils.RespondWithError(c, 400, "Leave is already rejected")
+		return
+	}
+
+	if leave.Status == "CANCELLED" {
+		utils.RespondWithError(c, 400, "Leave is already cancelled")
+		return
+	}
+
+	// Update leave status to CANCELLED
+	_, err = tx.Exec(`
+		UPDATE Tbl_Leave 
+		SET status='CANCELLED', updated_at=NOW() 
+		WHERE id=$1
+	`, leaveID)
+	if err != nil {
+		utils.RespondWithError(c, 500, "Failed to cancel leave: "+err.Error())
+		return
+	}
+
+	// Commit transaction
+	if err = tx.Commit(); err != nil {
+		utils.RespondWithError(c, 500, "Failed to commit transaction")
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"message": "Leave cancelled successfully",
+		"leave_id": leaveID,
+	})
+}
+
+// WithdrawApprovedLeave - POST /api/leaves/:id/withdraw
+// Allows admins/managers to withdraw an approved leave and restore balance
+func (h *HandlerFunc) WithdrawApprovedLeave(c *gin.Context) {
+	// Get user info from middleware
+	roleRaw, _ := c.Get("role")
+	role := roleRaw.(string)
+
+	// Only admins and managers can withdraw approved leaves
+	if role == "EMPLOYEE" {
+		utils.RespondWithError(c, 403, "Only admins and managers can withdraw approved leaves")
+		return
+	}
+
+	// Parse leave ID from URL
+	leaveID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		utils.RespondWithError(c, 400, "Invalid leave ID")
+		return
+	}
+
+	// Start transaction
+	tx, err := h.Query.DB.Beginx()
+	if err != nil {
+		utils.RespondWithError(c, 500, "Failed to start transaction")
+		return
+	}
+	defer tx.Rollback()
+
+	// Fetch leave details
+	var leave Leave
+	err = tx.Get(&leave, `SELECT * FROM Tbl_Leave WHERE id=$1 FOR UPDATE`, leaveID)
+	if err != nil {
+		utils.RespondWithError(c, 404, "Leave not found")
+		return
+	}
+
+	// Check if leave is approved
+	if leave.Status != "APPROVED" {
+		utils.RespondWithError(c, 400, fmt.Sprintf("Cannot withdraw leave with status: %s. Only approved leaves can be withdrawn", leave.Status))
+		return
+	}
+
+	// Check if leave has already started
+	today := time.Now().Truncate(24 * time.Hour)
+	if leave.StartDate.Before(today) {
+		utils.RespondWithError(c, 400, "Cannot withdraw leave that has already started or passed")
+		return
+	}
+
+	// Update leave status to CANCELLED
+	_, err = tx.Exec(`
+		UPDATE Tbl_Leave 
+		SET status='CANCELLED', updated_at=NOW() 
+		WHERE id=$1
+	`, leaveID)
+	if err != nil {
+		utils.RespondWithError(c, 500, "Failed to withdraw leave: "+err.Error())
+		return
+	}
+
+	// Restore leave balance
+	_, err = tx.Exec(`
+		UPDATE Tbl_Leave_balance 
+		SET used = used - $1, closing = closing + $1, updated_at = NOW()
+		WHERE employee_id=$2 AND leave_type_id=$3
+	`, leave.Days, leave.EmployeeID, leave.LeaveTypeID)
+	if err != nil {
+		utils.RespondWithError(c, 500, "Failed to restore leave balance: "+err.Error())
+		return
+	}
+
+	// Commit transaction
+	if err = tx.Commit(); err != nil {
+		utils.RespondWithError(c, 500, "Failed to commit transaction")
+		return
+	}
+
+	// Send notification to employee
+	go func() {
+		var empDetails struct {
+			Email    string `db:"email"`
+			FullName string `db:"full_name"`
+		}
+		h.Query.DB.Get(&empDetails, "SELECT email, full_name FROM Tbl_Employee WHERE id=$1", leave.EmployeeID)
+
+		var leaveTypeName string
+		h.Query.DB.Get(&leaveTypeName, "SELECT name FROM Tbl_Leave_type WHERE id=$1", leave.LeaveTypeID)
+
+		// You can create a new email template for this
+		body := fmt.Sprintf(`
+			<h2>Leave Withdrawn</h2>
+			<p>Dear %s,</p>
+			<p>Your approved leave has been withdrawn by management:</p>
+			<ul>
+				<li><strong>Leave Type:</strong> %s</li>
+				<li><strong>Dates:</strong> %s to %s</li>
+				<li><strong>Days:</strong> %.1f</li>
+			</ul>
+			<p>Your leave balance has been restored.</p>
+			<p>Please contact your manager for more details.</p>
+		`, empDetails.FullName, leaveTypeName, 
+			leave.StartDate.Format("2006-01-02"), 
+			leave.EndDate.Format("2006-01-02"), 
+			leave.Days)
+
+		utils.SendEmail(empDetails.Email, "Leave Withdrawn", body)
+	}()
+
+	c.JSON(200, gin.H{
+		"message": "Leave withdrawn successfully and balance restored",
+		"leave_id": leaveID,
+		"days_restored": leave.Days,
 	})
 }

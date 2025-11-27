@@ -335,3 +335,70 @@ func (r *Repository) GetFinalizedPayslipsByEmployee(id uuid.UUID) (*sql.Rows, er
 	`
 	return r.DB.Query(query, id)
 }
+
+// ------------------ GET EMPLOYEE BY ID ------------------
+func (r *Repository) GetEmployeeByID(empID uuid.UUID) (*models.EmployeeInput, error) {
+	var emp models.EmployeeInput
+	query := `
+        SELECT 
+            e.id, e.full_name, e.email, e.status,
+            r.type AS role, e.manager_id,
+            e.salary, e.joining_date,
+            e.created_at, e.updated_at, e.deleted_at
+        FROM Tbl_Employee e
+        JOIN Tbl_Role r ON e.role_id = r.id
+        WHERE e.id = $1
+    `
+	
+	err := r.DB.QueryRow(query, empID).Scan(
+		&emp.ID,
+		&emp.FullName,
+		&emp.Email,
+		&emp.Status,
+		&emp.Role,
+		&emp.ManagerID,
+		&emp.Salary,
+		&emp.JoiningDate,
+		&emp.CreatedAt,
+		&emp.UpdatedAt,
+		&emp.DeletedAt,
+	)
+	
+	if err != nil {
+		return nil, err
+	}
+	
+	// Fetch manager name if exists
+	if emp.ManagerID != nil {
+		var mName string
+		err := r.DB.QueryRow(`
+            SELECT full_name FROM Tbl_Employee WHERE id = $1
+        `, emp.ManagerID).Scan(&mName)
+		
+		if err == nil {
+			emp.ManagerName = &mName
+		}
+	}
+	
+	return &emp, nil
+}
+
+// ------------------ UPDATE EMPLOYEE INFO ------------------
+func (r *Repository) UpdateEmployeeInfo(empID uuid.UUID, fullName, email string, salary *float64) error {
+	_, err := r.DB.Exec(`
+        UPDATE Tbl_Employee
+        SET full_name = $1, email = $2, salary = $3, updated_at = NOW()
+        WHERE id = $4
+    `, fullName, email, salary, empID)
+	return err
+}
+
+// ------------------ UPDATE EMPLOYEE PASSWORD ------------------
+func (r *Repository) UpdateEmployeePassword(empID uuid.UUID, hashedPassword string) error {
+	_, err := r.DB.Exec(`
+        UPDATE Tbl_Employee
+        SET password = $1, updated_at = NOW()
+        WHERE id = $2
+    `, hashedPassword, empID)
+	return err
+}

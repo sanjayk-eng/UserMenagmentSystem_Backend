@@ -40,8 +40,32 @@ func (h *HandlerFunc) GetEmployee(c *gin.Context) {
 	})
 }
 
+// GetEmployeeById - GET /api/employee/:id
+// Simple endpoint - just fetch and return employee data
 func (h *HandlerFunc) GetEmployeeById(c *gin.Context) {
+	// 1️⃣ Parse Employee ID
+	empIDStr := c.Param("id")
+	empID, err := uuid.Parse(empIDStr)
+	if err != nil {
+		utils.RespondWithError(c, 400, "invalid employee ID")
+		return
+	}
 
+	// 2️⃣ Fetch employee details
+	employee, err := h.Query.GetEmployeeByID(empID)
+	if err != nil {
+		utils.RespondWithError(c, 404, "employee not found")
+		return
+	}
+
+	// 3️⃣ Remove password hash (security)
+	employee.Password = ""
+
+	// 4️⃣ Response
+	c.JSON(200, gin.H{
+		"message":  "employee details fetched successfully",
+		"employee": employee,
+	})
 }
 
 func (h *HandlerFunc) CreateEmployee(c *gin.Context) {
@@ -287,11 +311,190 @@ func (h *HandlerFunc) UpdateEmployeeManager(c *gin.Context) {
 	})
 }
 
-// func (h *HandlerFunc) UpdateEmployeeInfo(c *gin.Context) {
-// 	c.JSON(http.StatusOK, gin.H{"message": "Employee info updated"})
-// }
+// UpdateEmployeeInfo - PATCH /api/employee/:id
+// Anyone can update their own name
+// Only SUPERADMIN and ADMIN can update email and salary
+func (h *HandlerFunc) UpdateEmployeeInfo(c *gin.Context) {
+	// 1️⃣ Get current user info
+	currentUserID, _ := uuid.Parse(c.GetString("user_id"))
+	role := c.GetString("role")
+
+	// 2️⃣ Parse Employee ID
+	empIDStr := c.Param("id")
+	empID, err := uuid.Parse(empIDStr)
+	if err != nil {
+		utils.RespondWithError(c, 400, "invalid employee ID")
+		return
+	}
+
+	// 3️⃣ Check if employee exists
+	existingEmp, err := h.Query.GetEmployeeByID(empID)
+	if err != nil {
+		utils.RespondWithError(c, 404, "employee not found")
+		return
+	}
+
+	// 4️⃣ Bind input JSON
+	var input struct {
+		FullName *string  `json:"full_name"`
+		Email    *string  `json:"email"`
+		Salary   *float64 `json:"salary"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		utils.RespondWithError(c, 400, "invalid input: "+err.Error())
+		return
+	}
+
+	// 5️⃣ Permission checks
+	isAdmin := role == "SUPERADMIN" || role == "ADMIN"
+	isSelf := currentUserID == empID
+
+	// Check if trying to update email or salary
+	if (input.Email != nil || input.Salary != nil) && !isAdmin {
+		utils.RespondWithError(c, 403, "only SUPERADMIN and ADMIN can update email and salary")
+		return
+	}
+
+	// Check if trying to update someone else's name
+	if input.FullName != nil && !isSelf && !isAdmin {
+		utils.RespondWithError(c, 403, "you can only update your own name")
+		return
+	}
+
+	// 6️⃣ Validate and update email if provided
+	var finalEmail string
+	if input.Email != nil {
+		if !strings.HasSuffix(*input.Email, "@zenithive.com") {
+			utils.RespondWithError(c, 400, "email must end with @zenithive.com")
+			return
+		}
+
+		// Check if email is being changed and if new email already exists
+		if existingEmp.Email != *input.Email {
+			exists, err := h.Query.CheckEmailExists(*input.Email)
+			if err != nil {
+				utils.RespondWithError(c, 500, "failed to check email: "+err.Error())
+				return
+			}
+			if exists {
+				utils.RespondWithError(c, 400, "email already exists")
+				return
+			}
+		}
+		finalEmail = *input.Email
+	} else {
+		finalEmail = existingEmp.Email
+	}
+
+	// 7️⃣ Prepare final values
+	finalName := existingEmp.FullName
+	if input.FullName != nil {
+		finalName = *input.FullName
+	}
+
+	finalSalary := existingEmp.Salary
+	if input.Salary != nil {
+		finalSalary = input.Salary
+	}
+
+	// 8️⃣ Update employee info
+	err = h.Query.UpdateEmployeeInfo(empID, finalName, finalEmail, finalSalary)
+	if err != nil {
+		utils.RespondWithError(c, 500, "failed to update employee: "+err.Error())
+		return
+	}
+
+	// 9️⃣ Response
+	c.JSON(200, gin.H{
+		"message":     "employee information updated successfully",
+		"employee_id": empID,
+	})
+}
 
 // GetEmployeeReports - GET /api/employees/:id/reports
 func (s *HandlerFunc) GetEmployeeReports(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "Get employee reports"})
+}
+
+// UpdateEmployeePassword - PATCH /api/employee/:id/password
+func (h *HandlerFunc) UpdateEmployeePassword(c *gin.Context) {
+	// 1️ Permission check - Only SUPERADMIN, ADMIN, and HR
+	role := c.GetString("role")
+	// if role != "SUPERADMIN" && role != "ADMIN" && role != "HR" {
+	// 	utils.RespondWithError(c, 401, "not permitted to update password")
+	// 	return
+	// }
+
+	// 2️ Parse Employee ID
+	empIDStr := c.Param("id")
+	empID, err := uuid.Parse(empIDStr)
+	if err != nil {
+		utils.RespondWithError(c, 400, "invalid employee ID")
+		return
+	}
+
+	// 3️ Bind input JSON
+	var input struct {
+		NewPassword string `json:"new_password" validate:"required,min=6"`
+	}
+	if err := c.ShouldBindJSON(&input); err != nil {
+		utils.RespondWithError(c, 400, "invalid input: password is required and must be at least 6 characters")
+		return
+	}
+
+	// 4️ Validate password length
+	if len(input.NewPassword) < 6 {
+		utils.RespondWithError(c, 400, "password must be at least 6 characters long")
+		return
+	}
+
+	// 5️ Check if employee exists
+	_, err = h.Query.GetEmployeeByID(empID)
+	if err != nil {
+		utils.RespondWithError(c, 404, "employee not found")
+		return
+	}
+
+	// 6️ Hash the new password
+	hashedPassword, err := utils.HashPassword(input.NewPassword)
+	if err != nil {
+		utils.RespondWithError(c, 500, "failed to hash password: "+err.Error())
+		return
+	}
+
+	// 7️ Update password in database
+	err = h.Query.UpdateEmployeePassword(empID, hashedPassword)
+	if err != nil {
+		utils.RespondWithError(c, 500, "failed to update password: "+err.Error())
+		return
+	}
+
+	// 8️ Send notification email to employee
+	go func() {
+		var empDetails struct {
+			Email    string `db:"email"`
+			FullName string `db:"full_name"`
+		}
+		h.Query.DB.Get(&empDetails, "SELECT email, full_name FROM Tbl_Employee WHERE id=$1", empID)
+
+		var updatedByName string
+		currentUserID := c.GetString("user_id")
+		h.Query.DB.Get(&updatedByName, "SELECT full_name FROM Tbl_Employee WHERE id=$1", currentUserID)
+
+		err := utils.SendPasswordUpdateEmail(
+			empDetails.Email,
+			empDetails.FullName,
+			updatedByName,
+			role,
+		)
+		if err != nil {
+			fmt.Printf("Failed to send password update notification: %v\n", err)
+		}
+	}()
+
+	// 9️ Response
+	c.JSON(200, gin.H{
+		"message":     "password updated successfully",
+		"employee_id": empID,
+	})
 }

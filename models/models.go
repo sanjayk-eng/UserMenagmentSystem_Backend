@@ -53,7 +53,7 @@ type LeaveInput struct {
 	LeaveTypeID  int        `json:"leave_type_id" validate:"required"`
 	StartDate    time.Time  `json:"start_date" validate:"required"`
 	EndDate      time.Time  `json:"end_date" validate:"required"`
-	Reason       string     `json:"reason" validate:"required,min=3"` // NEW FIELD
+	Reason       string     `json:"reason" validate:"required,min=10,max=500"` // Enhanced validation
 	Days         *float64   `json:"days,omitempty"`
 	Status       string     `json:"status,omitempty"`
 	AppliedByID  *uuid.UUID `json:"applied_by,omitempty"`

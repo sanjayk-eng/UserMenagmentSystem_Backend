@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/jung-kurt/gofpdf"
 	"github.com/sanjayk-eng/UserMenagmentSystem_Backend/utils"
 )
@@ -100,16 +101,11 @@ func (h *HandlerFunc) RunPayroll(c *gin.Context) {
 	var previews []PayrollPreview
 
 	for _, emp := range employees {
-		var absentDays float64
-		err := h.Query.DB.Get(&absentDays, `
-			SELECT COALESCE(SUM(days),0) 
-			FROM Tbl_Leave
-			WHERE employee_id=$1 AND status='APPROVED'
-			AND EXTRACT(MONTH FROM start_date)=$2
-			AND EXTRACT(YEAR FROM start_date)=$3
-		`, emp.ID, input.Month, input.Year)
-		if err != nil {
-			utils.RespondWithError(c, 500, "Failed to calculate absent days: "+err.Error())
+		// Calculate absent days for this specific month only
+		// Handle cross-month leaves correctly
+		absentDays := calculateAbsentDaysForMonth(h.Query.DB, emp.ID, input.Month, input.Year)
+		if absentDays < 0 {
+			utils.RespondWithError(c, 500, "Failed to calculate absent days")
 			return
 		}
 
@@ -232,16 +228,11 @@ func (h *HandlerFunc) FinalizePayroll(c *gin.Context) {
 	var payslipIDs []uuid.UUID
 
 	for _, emp := range employees {
-		var absentDays float64
-		err := tx.Get(&absentDays, `
-			SELECT COALESCE(SUM(days),0)
-			FROM Tbl_Leave
-			WHERE employee_id=$1 AND status='APPROVED'
-			  AND EXTRACT(MONTH FROM start_date)=$2
-			  AND EXTRACT(YEAR FROM start_date)=$3
-		`, emp.ID, run.Month, run.Year)
-		if err != nil {
-			utils.RespondWithError(c, 500, "Failed to calculate absent days: "+err.Error())
+		// Calculate absent days for this specific month only
+		// Handle cross-month leaves correctly
+		absentDays := calculateAbsentDaysForMonth(h.Query.DB, emp.ID, run.Month, run.Year)
+		if absentDays < 0 {
+			utils.RespondWithError(c, 500, "Failed to calculate absent days")
 			return
 		}
 
@@ -622,4 +613,75 @@ func (h *HandlerFunc) GetFinalizedPayslips(c *gin.Context) {
 		"total_payslips": len(result),
 		"data":           result,
 	})
+}
+
+
+// calculateAbsentDaysForMonth calculates the number of absent days for a specific month
+// Handles cross-month leaves correctly by counting only days within the payroll month
+func calculateAbsentDaysForMonth(db *sqlx.DB, employeeID uuid.UUID, month, year int) float64 {
+	// Get first and last day of the payroll month
+	firstDay := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
+	lastDay := firstDay.AddDate(0, 1, -1) // Last day of the month
+
+	// Fetch all approved UNPAID leaves that overlap with this month
+	type LeaveRecord struct {
+		StartDate time.Time `db:"start_date"`
+		EndDate   time.Time `db:"end_date"`
+		Days      float64   `db:"days"`
+	}
+
+	var leaves []LeaveRecord
+	err := db.Select(&leaves, `
+		SELECT l.start_date, l.end_date, l.days
+		FROM Tbl_Leave l
+		JOIN Tbl_Leave_type lt ON l.leave_type_id = lt.id
+		WHERE l.employee_id=$1 
+		AND l.status='APPROVED'
+		AND lt.is_paid = false
+		AND l.start_date <= $2
+		AND l.end_date >= $3
+	`, employeeID, lastDay, firstDay)
+
+	if err != nil {
+		fmt.Printf("Error fetching leaves: %v\n", err)
+		return -1
+	}
+
+	// Calculate total absent days within this month
+	totalAbsentDays := 0.0
+
+	for _, leave := range leaves {
+		// Determine the overlap period
+		overlapStart := leave.StartDate
+		if overlapStart.Before(firstDay) {
+			overlapStart = firstDay
+		}
+
+		overlapEnd := leave.EndDate
+		if overlapEnd.After(lastDay) {
+			overlapEnd = lastDay
+		}
+
+		// Count working days in the overlap period
+		daysInMonth := 0
+		for d := overlapStart; !d.After(overlapEnd); d = d.AddDate(0, 0, 1) {
+			// Skip weekends
+			if d.Weekday() == time.Saturday || d.Weekday() == time.Sunday {
+				continue
+			}
+
+			// Check if it's a holiday
+			var isHoliday bool
+			err := db.Get(&isHoliday, `
+				SELECT EXISTS(SELECT 1 FROM Tbl_Holiday WHERE date=$1)
+			`, d)
+			if err == nil && !isHoliday {
+				daysInMonth++
+			}
+		}
+
+		totalAbsentDays += float64(daysInMonth)
+	}
+
+	return totalAbsentDays
 }

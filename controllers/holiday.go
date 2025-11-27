@@ -27,7 +27,16 @@ func (s *HandlerFunc) AddHoliday(c *gin.Context) {
 		return
 	}
 
-	id, err := s.Query.AddHoliday(input.Name, input.Date, input.Type)
+	// Normalize date to UTC midnight to avoid timezone issues
+	normalizedDate := time.Date(
+		input.Date.Year(),
+		input.Date.Month(),
+		input.Date.Day(),
+		0, 0, 0, 0,
+		time.UTC,
+	)
+
+	id, err := s.Query.AddHoliday(input.Name, normalizedDate, input.Type)
 	if err != nil {
 		utils.RespondWithError(c, http.StatusInternalServerError, "Failed to add holiday: "+err.Error())
 		return
@@ -36,6 +45,7 @@ func (s *HandlerFunc) AddHoliday(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Holiday added successfully",
 		"id":      id,
+		"date":    normalizedDate.Format("2006-01-02"),
 	})
 }
 
