@@ -149,12 +149,13 @@ func (h *HandlerFunc) RunPayroll(c *gin.Context) {
 }
 
 // FinalizePayroll - generates payslips
+// Only SUPERADMIN can finalize payroll
 func (h *HandlerFunc) FinalizePayroll(c *gin.Context) {
-	// --- Role Check ---
+	// --- Role Check - Only SUPERADMIN ---
 	roleRaw, _ := c.Get("role")
 	role := roleRaw.(string)
-	if role != "SUPERADMIN" && role != "ADMIN" {
-		utils.RespondWithError(c, 403, "Not authorized to finalize payroll")
+	if role != "SUPERADMIN" {
+		utils.RespondWithError(c, 403, "Only SUPERADMIN can finalize payroll")
 		return
 	}
 
