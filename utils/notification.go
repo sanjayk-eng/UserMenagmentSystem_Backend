@@ -68,7 +68,7 @@ Password: %s
 
 Please login to the system and change your password at your earliest convenience.
 
-Login URL: [Your Frontend URL]
+Login URL: [https://zenithiveapp.netlify.app]
 
 If you have any questions, please contact your HR department.
 
