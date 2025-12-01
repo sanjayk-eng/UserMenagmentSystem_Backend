@@ -9,5 +9,4 @@ func RespondWithError(c *gin.Context, code int, message string) {
 			"message": message,
 		},
 	})
-	c.Abort()
 }

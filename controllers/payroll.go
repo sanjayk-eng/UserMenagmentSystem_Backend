@@ -554,7 +554,14 @@ func (h *HandlerFunc) GetFinalizedPayslips(c *gin.Context) {
 		utils.RespondWithError(c, 500, "Failed to fetch payslips: "+err.Error())
 		return
 	}
-	defer rows.Close()
+	
+	// Only defer close if rows is not nil
+	if rows != nil {
+		defer rows.Close()
+	} else {
+		utils.RespondWithError(c, 500, "No rows returned from query")
+		return
+	}
 
 	type FullPayslipResponse struct {
 		PayslipID       uuid.UUID `json:"payslip_id"`

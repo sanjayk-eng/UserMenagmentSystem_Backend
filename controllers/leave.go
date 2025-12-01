@@ -707,9 +707,24 @@ func CalculateWorkingDays(tx *sqlx.Tx, start, end time.Time) (float64, error) {
 	return float64(workingDays), nil
 }
 func (h *HandlerFunc) GetAllLeaves(c *gin.Context) {
-	// 1️⃣ Get Role & User ID
+	// 1️⃣ Get Role & User ID with validation
 	role := c.GetString("role")
-	userID, _ := uuid.Parse(c.GetString("user_id"))
+	if role == "" {
+		utils.RespondWithError(c, http.StatusUnauthorized, "Role not found in context")
+		return
+	}
+
+	userIDStr := c.GetString("user_id")
+	if userIDStr == "" {
+		utils.RespondWithError(c, http.StatusUnauthorized, "User ID not found in context")
+		return
+	}
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusBadRequest, "Invalid user ID format: "+err.Error())
+		return
+	}
 
 	// 2️⃣ Base Query - Explicitly select only the columns we need
 	baseQuery := `
@@ -734,13 +749,21 @@ func (h *HandlerFunc) GetAllLeaves(c *gin.Context) {
 	)
 
 	// 3️⃣ Role-based conditions
-	if role == "EMPLOYEE" {
+	switch role {
+	case "EMPLOYEE":
+		// Employees can only see their own leaves
 		conditions = append(conditions, "l.employee_id = $1")
 		args = append(args, userID)
-	} else if role == "MANAGER" {
+	case "MANAGER":
 		// Manager can see: their own leaves + their team members' leaves
 		conditions = append(conditions, "(e.manager_id = $1 OR l.employee_id = $1)")
 		args = append(args, userID)
+	case "ADMIN", "SUPERADMIN":
+		// Admin and SuperAdmin can see all leaves (no filter)
+		// No conditions added
+	default:
+		utils.RespondWithError(c, http.StatusForbidden, "Invalid role: "+role)
+		return
 	}
 
 	// Apply conditions safely
@@ -751,18 +774,58 @@ func (h *HandlerFunc) GetAllLeaves(c *gin.Context) {
 
 	query += " ORDER BY l.created_at DESC"
 
-	// 4️⃣ Execute with Queryx to avoid prepared statement caching issues
+	// 4️⃣ Execute query with proper error handling
+	// Use Queryx instead of Select to avoid prepared statement caching issues
 	var result []models.LeaveResponse
-	err := h.Query.DB.Select(&result, query, args...)
+	
+	rows, err := h.Query.DB.Queryx(query, args...)
 	if err != nil {
-		utils.RespondWithError(c, 500, "Failed to fetch leaves: "+err.Error())
+		// Log the error for debugging
+		fmt.Printf("❌ GetAllLeaves DB Error: %v\n", err)
+		fmt.Printf("Query: %s\n", query)
+		fmt.Printf("Args: %v\n", args)
+		
+		// Check for specific database errors
+		if strings.Contains(err.Error(), "does not exist") || strings.Contains(err.Error(), "unnamed prepared statement") {
+			utils.RespondWithError(c, http.StatusInternalServerError, "Database connection error. Please restart the application or contact administrator")
+			return
+		}
+		
+		utils.RespondWithError(c, http.StatusInternalServerError, "Failed to fetch leaves: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	// Scan results manually
+	for rows.Next() {
+		var leave models.LeaveResponse
+		err := rows.StructScan(&leave)
+		if err != nil {
+			fmt.Printf("❌ GetAllLeaves Scan Error: %v\n", err)
+			utils.RespondWithError(c, http.StatusInternalServerError, "Failed to parse leave data: "+err.Error())
+			return
+		}
+		result = append(result, leave)
+	}
+
+	// Check for errors from iterating over rows
+	if err = rows.Err(); err != nil {
+		fmt.Printf("❌ GetAllLeaves Rows Error: %v\n", err)
+		utils.RespondWithError(c, http.StatusInternalServerError, "Error reading leave data: "+err.Error())
 		return
 	}
 
-	// 5️⃣ Return success
-	c.JSON(200, gin.H{
-		"total": len(result),
-		"data":  result,
+	// 5️⃣ Handle empty result
+	if result == nil {
+		result = []models.LeaveResponse{}
+	}
+
+	// 6️⃣ Return success with metadata
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Leaves fetched successfully",
+		"total":   len(result),
+		"role":    role,
+		"data":    result,
 	})
 }
 
@@ -1369,13 +1432,28 @@ func (h *HandlerFunc) WithdrawLeave(c *gin.Context) {
 // GetManagerLeaveHistory - GET /api/leaves/manager/history
 // Manager gets leave history of their team members
 func (h *HandlerFunc) GetManagerLeaveHistory(c *gin.Context) {
-	// 1️⃣ Get current user info
-	currentUserID, _ := uuid.Parse(c.GetString("user_id"))
+	// 1️⃣ Get current user info with validation
 	role := c.GetString("role")
+	if role == "" {
+		utils.RespondWithError(c, http.StatusUnauthorized, "Role not found in context")
+		return
+	}
+
+	userIDStr := c.GetString("user_id")
+	if userIDStr == "" {
+		utils.RespondWithError(c, http.StatusUnauthorized, "User ID not found in context")
+		return
+	}
+
+	currentUserID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusBadRequest, "Invalid user ID format: "+err.Error())
+		return
+	}
 
 	// 2️⃣ Permission check - Only MANAGER can use this endpoint
 	if role != "MANAGER" {
-		utils.RespondWithError(c, 403, "only managers can access team leave history")
+		utils.RespondWithError(c, http.StatusForbidden, "Only managers can access team leave history")
 		return
 	}
 
@@ -1392,25 +1470,34 @@ func (h *HandlerFunc) GetManagerLeaveHistory(c *gin.Context) {
 			l.status,
 			l.created_at AS applied_at
 		FROM Tbl_Leave l
-		JOIN Tbl_Employee e ON l.employee_id = e.id
-		JOIN Tbl_Leave_Type lt ON lt.id = l.leave_type_id
+		INNER JOIN Tbl_Employee e ON l.employee_id = e.id
+		INNER JOIN Tbl_Leave_Type lt ON lt.id = l.leave_type_id
 		WHERE e.manager_id = $1
 		ORDER BY l.created_at DESC
 	`
 
-	// 4️⃣ Execute query
+	// 4️⃣ Execute query with proper error handling
 	var result []models.LeaveResponse
-	err := h.Query.DB.Select(&result, query, currentUserID)
+	err = h.Query.DB.Select(&result, query, currentUserID)
 	if err != nil {
-		utils.RespondWithError(c, 500, "failed to fetch team leave history: "+err.Error())
+		// Log the error for debugging
+		fmt.Printf("❌ GetManagerLeaveHistory DB Error: %v\n", err)
+		fmt.Printf("Manager ID: %s\n", currentUserID)
+		
+		utils.RespondWithError(c, http.StatusInternalServerError, "Failed to fetch team leave history: "+err.Error())
 		return
 	}
 
-	// 5️⃣ Response
-	c.JSON(200, gin.H{
-		"message":     "team leave history fetched successfully",
-		"manager_id":  currentUserID,
+	// 5️⃣ Handle empty result
+	if result == nil {
+		result = []models.LeaveResponse{}
+	}
+
+	// 6️⃣ Response with metadata
+	c.JSON(http.StatusOK, gin.H{
+		"message":      "Team leave history fetched successfully",
+		"manager_id":   currentUserID,
 		"total_leaves": len(result),
-		"leaves":      result,
+		"leaves":       result,
 	})
 }

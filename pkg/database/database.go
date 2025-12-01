@@ -36,12 +36,20 @@ func Connection(env *config.ENV) *sqlx.DB {
 		if err != nil {
 			log.Fatalf("Failed to connect to database: %v", err)
 		}
+		
+		// Configure connection pool to prevent prepared statement caching issues
+		db.SetMaxOpenConns(25)                // Maximum number of open connections
+		db.SetMaxIdleConns(5)                 // Maximum number of idle connections
+		db.SetConnMaxLifetime(0)              // Connections never expire (0 = unlimited)
+		db.SetConnMaxIdleTime(0)              // Idle connections never expire
+		
 		// Optional: ping to ensure DB is reachable
 		if err := db.Ping(); err != nil {
 			log.Fatalf("Database ping failed: %v", err)
 		}
+		
 		DB = db
-		log.Println("✅ Database connection established successfully")
+		log.Println(" Database connection established successfully")
 		RunMigrations("./pkg/migration")
 	})
 	return DB
