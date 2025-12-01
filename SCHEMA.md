@@ -231,7 +231,7 @@ Stores leave applications.
 | start_date | DATE | | Leave start date |
 | end_date | DATE | | Leave end date |
 | days | NUMERIC | | Number of leave days |
-| status | TEXT | | Leave status (Pending/MANAGER_APPROVED/APPROVED/REJECTED/CANCELLED/WITHDRAWAL_PENDING/WITHDRAWN) |
+| status | TEXT | | Leave status (Pending/MANAGER_APPROVED/MANAGER_REJECTED/APPROVED/REJECTED/CANCELLED/WITHDRAWAL_PENDING/WITHDRAWN) |
 | applied_by | UUID | FK → Tbl_Employee.id | Who applied (manager for admin-add) |
 | approved_by | UUID | FK → Tbl_Employee.id | Who approved/rejected |
 | created_at | TIMESTAMP | DEFAULT NOW() | Application time |
@@ -1104,7 +1104,7 @@ CHECK (status IN ('active', 'inactive'));
 -- Ensure valid leave status
 ALTER TABLE Tbl_Leave 
 ADD CONSTRAINT chk_leave_status 
-CHECK (status IN ('Pending', 'APPROVED', 'REJECTED'));
+CHECK (status IN ('Pending', 'MANAGER_APPROVED', 'MANAGER_REJECTED', 'APPROVED', 'REJECTED', 'CANCELLED', 'WITHDRAWAL_PENDING', 'WITHDRAWN'));
 
 -- Ensure valid payroll status
 ALTER TABLE Tbl_Payroll_run 

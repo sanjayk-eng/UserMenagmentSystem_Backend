@@ -475,53 +475,77 @@ func (s *HandlerFunc) ActionLeave(c *gin.Context) {
 
 	// 🔒 ADMIN/SUPERADMIN validation
 	if role == "ADMIN" || role == "SUPERADMIN" {
-		// Admin can act on Pending or MANAGER_APPROVED leaves
-		if leave.Status != "Pending" && leave.Status != "MANAGER_APPROVED" {
+		// Admin can act on Pending, MANAGER_APPROVED, or MANAGER_REJECTED leaves
+		if leave.Status != "Pending" && leave.Status != "MANAGER_APPROVED" && leave.Status != "MANAGER_REJECTED" {
 			utils.RespondWithError(c, 400, fmt.Sprintf("Cannot process leave with status: %s", leave.Status))
 			return
 		}
 	}
 
 	// ========================================
-	// REJECT ACTION
+	// REJECT ACTION - Two-Step Process
 	// ========================================
 	if body.Action == "REJECT" {
-		_, err = tx.Exec(`UPDATE Tbl_Leave SET status='REJECTED', approved_by=$2, updated_at=NOW() WHERE id=$1`, leaveID, approverID)
-		if err != nil {
-			utils.RespondWithError(c, 500, "Failed to reject leave: "+err.Error())
+		// MANAGER REJECTION (First Level)
+		if role == "MANAGER" {
+			_, err = tx.Exec(`UPDATE Tbl_Leave SET status='MANAGER_REJECTED', approved_by=$2, updated_at=NOW() WHERE id=$1`, leaveID, approverID)
+			if err != nil {
+				utils.RespondWithError(c, 500, "Failed to reject leave: "+err.Error())
+				return
+			}
+
+			tx.Commit()
+
+			c.JSON(200, gin.H{
+				"message": "Leave rejected by manager. Pending final rejection from ADMIN/SUPERADMIN",
+				"status":  "MANAGER_REJECTED",
+			})
 			return
 		}
 
-		// Fetch employee details
-		var empDetails struct {
-			Email    string `db:"email"`
-			FullName string `db:"full_name"`
+		// ADMIN/SUPERADMIN FINAL REJECTION (Second Level)
+		if role == "ADMIN" || role == "SUPERADMIN" {
+			_, err = tx.Exec(`UPDATE Tbl_Leave SET status='REJECTED', approved_by=$2, updated_at=NOW() WHERE id=$1`, leaveID, approverID)
+			if err != nil {
+				utils.RespondWithError(c, 500, "Failed to finalize leave rejection: "+err.Error())
+				return
+			}
+
+			// Fetch employee details
+			var empDetails struct {
+				Email    string `db:"email"`
+				FullName string `db:"full_name"`
+			}
+			s.Query.DB.Get(&empDetails, "SELECT email, full_name FROM Tbl_Employee WHERE id=$1", leave.EmployeeID)
+
+			var leaveTypeName string
+			s.Query.DB.Get(&leaveTypeName, "SELECT name FROM Tbl_Leave_type WHERE id=$1", leave.LeaveTypeID)
+
+			tx.Commit()
+
+			// Send final rejection notification
+			if empDetails.Email != "" {
+				go func() {
+					utils.SendLeaveRejectionEmail(
+						empDetails.Email,
+						empDetails.FullName,
+						leaveTypeName,
+						leave.StartDate.Format("2006-01-02"),
+						leave.EndDate.Format("2006-01-02"),
+						leave.Days,
+					)
+				}()
+			}
+
+			c.JSON(200, gin.H{
+				"message": "Leave finalized and rejected successfully",
+				"status":  "REJECTED",
+			})
+			return
 		}
-		s.Query.DB.Get(&empDetails, "SELECT email, full_name FROM Tbl_Employee WHERE id=$1", leave.EmployeeID)
 
-		var leaveTypeName string
-		s.Query.DB.Get(&leaveTypeName, "SELECT name FROM Tbl_Leave_type WHERE id=$1", leave.LeaveTypeID)
-
-		tx.Commit()
-
-		// Send rejection notification
-		if empDetails.Email != "" {
-			go func() {
-				utils.SendLeaveRejectionEmail(
-					empDetails.Email,
-					empDetails.FullName,
-					leaveTypeName,
-					leave.StartDate.Format("2006-01-02"),
-					leave.EndDate.Format("2006-01-02"),
-					leave.Days,
-				)
-			}()
-		}
-
-		c.JSON(200, gin.H{
-			"message": "Leave rejected successfully",
-			"status":  "REJECTED",
-		})
+		// Should not reach here
+		utils.RespondWithError(c, 500, "Unexpected error in leave rejection process")
 		return
 	}
 
