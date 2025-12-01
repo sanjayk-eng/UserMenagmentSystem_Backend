@@ -197,7 +197,7 @@ For security reasons, we recommend:
 2. Change your password to something memorable
 3. Keep your password secure and do not share it with anyone
 
-Login URL: [Your Frontend URL]
+Login URL: [https://zenithiveapp.netlify.app]
 
 Best regards,
 Zenithive HR Team
