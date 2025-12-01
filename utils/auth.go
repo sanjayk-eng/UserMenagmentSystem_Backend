@@ -1,8 +1,10 @@
 package utils
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/golang-jwt/jwt/v4"
@@ -33,6 +35,63 @@ func CheckPassword(password, hashed string) bool {
 	err := bcrypt.CompareHashAndPassword([]byte(hashed), []byte(password))
 	fmt.Println("----------------", err)
 	return err == nil
+}
+
+// GenerateSecurePassword generates a secure random password
+// Format: 4 uppercase + 4 lowercase + 2 digits + 2 special chars = 12 characters
+// Example: ABCDefgh12@#
+func GenerateSecurePassword() (string, error) {
+	const (
+		uppercaseLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+		lowercaseLetters = "abcdefghijklmnopqrstuvwxyz"
+		digits           = "0123456789"
+		specialChars     = "@#$%&*!?"
+	)
+
+	// Generate 4 uppercase letters
+	uppercase, err := generateRandomString(uppercaseLetters, 4)
+	if err != nil {
+		return "", err
+	}
+
+	// Generate 4 lowercase letters
+	lowercase, err := generateRandomString(lowercaseLetters, 4)
+	if err != nil {
+		return "", err
+	}
+
+	// Generate 2 digits
+	digit, err := generateRandomString(digits, 2)
+	if err != nil {
+		return "", err
+	}
+
+	// Generate 2 special characters
+	special, err := generateRandomString(specialChars, 2)
+	if err != nil {
+		return "", err
+	}
+
+	// Combine all parts: Uppercase + Lowercase + Digits + Special
+	password := uppercase + lowercase + digit + special
+
+	return password, nil
+}
+
+// generateRandomString generates a random string of specified length from given charset
+func generateRandomString(charset string, length int) (string, error) {
+	result := make([]byte, length)
+	charsetLen := big.NewInt(int64(len(charset)))
+
+	for i := 0; i < length; i++ {
+		randomIndex, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			return "", err
+		}
+		result[i] = charset[randomIndex.Int64()]
+	}
+
+	return string(result), nil
 }
 
 // -------------------------

@@ -18,7 +18,7 @@ type EmployeeInput struct {
 	FullName    string     `json:"full_name" validate:"required"`
 	Email       string     `json:"email" validate:"required,email"`
 	Role        string     `json:"role" validate:"required"`
-	Password    string     `json:"password" validate:"required"`
+	Password    string     `json:"password,omitempty"` // optional - auto-generated if not provided
 	ManagerID   *uuid.UUID `json:"manager_id,omitempty"`   // optional UUID
 	Salary      *float64   `json:"salary,omitempty"`       // optional
 	JoiningDate *time.Time `json:"joining_date,omitempty"` // optional

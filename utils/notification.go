@@ -37,7 +37,7 @@ func SendEmail(to, subject, body string) error {
 	}
 
 	client := &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 30 * time.Second, // Increased timeout for Google Apps Script
 	}
 
 	resp, err := client.Post(googleScriptURL, "application/json", bytes.NewBuffer(jsonData))

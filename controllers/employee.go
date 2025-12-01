@@ -111,8 +111,19 @@ func (h *HandlerFunc) CreateEmployee(c *gin.Context) {
 		return
 	}
 
+	// GENERATE SECURE PASSWORD (combination format)
+	generatedPassword, err := utils.GenerateSecurePassword()
+	if err != nil {
+		utils.RespondWithError(c, 500, "failed to generate secure password")
+		return
+	}
+
 	// HASH PASSWORD
-	hash, _ := utils.HashPassword(input.Password)
+	hash, err := utils.HashPassword(generatedPassword)
+	if err != nil {
+		utils.RespondWithError(c, 500, "failed to hash password")
+		return
+	}
 
 	// INSERT
 	err = h.Query.InsertEmployee(
@@ -125,14 +136,17 @@ func (h *HandlerFunc) CreateEmployee(c *gin.Context) {
 		return
 	}
 
-	// Send welcome email with credentials (async to not block response)
+	// Send welcome email with generated credentials (async to not block response)
 	go func() {
-		if err := utils.SendEmployeeCreationEmail(input.Email, input.FullName, input.Password); err != nil {
+		if err := utils.SendEmployeeCreationEmail(input.Email, input.FullName, generatedPassword); err != nil {
 			fmt.Printf("Failed to send welcome email to %s: %v\n", input.Email, err)
 		}
 	}()
 
-	c.JSON(201, gin.H{"message": "employee created"})
+	c.JSON(201, gin.H{
+		"message":  "employee created successfully",
+		"password": generatedPassword, // Return generated password in response
+	})
 }
 func (h *HandlerFunc) UpdateEmployeeRole(c *gin.Context) {
 	// ---------------------------
