@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: zenithive-backend
+    env: go
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: go build -o ums-backend main.go
+    startCommand: ./ums-backend
+    envVars:
+      - key: DB_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: PORT
+        value: 8082
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+    healthCheckPath: /
+    autoDeploy: true
