@@ -25,7 +25,7 @@ jobs:
       run: go mod download
 
     - name: Run tests
-      run: go test ./... -v || echo "No tests found"
+      run: go test ./... -v || echo "⚠️  No tests found"
 
     - name: Build App
       run: go build -o ums-backend main.go
@@ -40,33 +40,35 @@ jobs:
           exit 1
         fi
 
-  # Optional: Deploy via Render API (requires secrets)
-  # If you have render.yaml with autoDeploy: true, this step is not needed
+    - name: Deployment Status
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: |
+        echo "✅ Build passed - Render will auto-deploy this commit"
+        echo "📝 Check deployment: https://dashboard.render.com/"
+
   deploy:
     needs: build-and-test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
-    - name: Deploy to Render
+    - name: Trigger Render Deploy
       env:
-        RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
       run: |
-        if [ -z "$RENDER_DEPLOY_HOOK" ]; then
-          echo "⚠️  RENDER_DEPLOY_HOOK not set - skipping manual deploy"
-          echo "📝 Render will auto-deploy if render.yaml is configured with autoDeploy: true"
-          echo "✅ Build passed - Render will deploy automatically on push to main"
+        if [ -z "$DEPLOY_HOOK" ]; then
+          echo "⚠️  RENDER_DEPLOY_HOOK secret not configured"
+          echo "✅ Render will auto-deploy via GitHub integration"
+          echo "📝 No manual trigger needed"
           exit 0
         fi
         
         echo "🚀 Triggering Render deployment via webhook..."
-        response=$(curl -s -w "\n%{http_code}" -X POST "$RENDER_DEPLOY_HOOK")
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$DEPLOY_HOOK")
         
-        http_code=$(echo "$response" | tail -n1)
-        
-        if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
-          echo "✅ Deployment triggered successfully!"
+        if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+          echo "✅ Deployment triggered successfully (HTTP $HTTP_CODE)"
         else
-          echo "⚠️  Deployment webhook returned status $http_code"
+          echo "⚠️  Webhook returned HTTP $HTTP_CODE"
           echo "📝 Check Render dashboard for deployment status"
         fi
