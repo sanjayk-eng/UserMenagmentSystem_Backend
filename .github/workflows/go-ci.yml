@@ -48,7 +48,7 @@ jobs:
 
     # 7️⃣ Deploy to Render
     - name: Deploy to Render
-      if: github.ref == 'refs/heads/main' 
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       env:
         RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
       run: |
