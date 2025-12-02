@@ -40,35 +40,18 @@ jobs:
           exit 1
         fi
 
-    - name: Deployment Status
+    - name: Deployment Info
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
-        echo "✅ Build passed - Render will auto-deploy this commit"
-        echo "📝 Check deployment: https://dashboard.render.com/"
-
-  deploy:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    steps:
-    - name: Trigger Render Deploy
-      env:
-        DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
-      run: |
-        if [ -z "$DEPLOY_HOOK" ]; then
-          echo "⚠️  RENDER_DEPLOY_HOOK secret not configured"
-          echo "✅ Render will auto-deploy via GitHub integration"
-          echo "📝 No manual trigger needed"
-          exit 0
-        fi
-        
-        echo "🚀 Triggering Render deployment via webhook..."
-        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$DEPLOY_HOOK")
-        
-        if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-          echo "✅ Deployment triggered successfully (HTTP $HTTP_CODE)"
-        else
-          echo "⚠️  Webhook returned HTTP $HTTP_CODE"
-          echo "📝 Check Render dashboard for deployment status"
-        fi
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "✅ Build passed successfully!"
+        echo "🚀 Render will auto-deploy this commit automatically"
+        echo ""
+        echo "📝 To enable manual deployment trigger:"
+        echo "   1. Go to: GitHub Settings → Secrets → Actions"
+        echo "   2. Add secret: RENDER_DEPLOY_HOOK"
+        echo "   3. Value: https://api.render.com/deploy/srv-d4jfdskhg0os73bos68g?key=8g9edUNfAMA"
+        echo ""
+        echo "🔍 Check deployment status:"
+        echo "   → https://dashboard.render.com/"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
