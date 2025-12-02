@@ -5,19 +5,42 @@
 - Render account with service created
 - Environment variables configured in Render dashboard
 
-## Setup GitHub Secrets
+## Quick Setup (Recommended)
 
-Go to your GitHub repository → Settings → Secrets and variables → Actions → New repository secret
+### Option 1: Auto-Deploy with render.yaml (Easiest)
 
-Add these secrets:
+1. **Connect GitHub to Render**
+   - Go to Render Dashboard: https://dashboard.render.com/
+   - Click "New +" → "Web Service"
+   - Connect your GitHub repository
+   - Render will automatically detect `render.yaml`
 
-1. **RENDER_API_KEY**
-   - Get from: Render Dashboard → Account Settings → API Keys
-   - Create a new API key if you don't have one
+2. **Configure Environment Variables in Render**
+   - After service is created, go to "Environment" tab
+   - Add these variables:
+     - `DB_URL` - Your PostgreSQL connection string
+     - `JWT_SECRET` - Secret key for JWT tokens
+     - `EMAIL_FROM` - Email address for sending notifications
+     - `EMAIL_PASSWORD` - Email password/app password
+     - `SMTP_HOST` - SMTP server host (e.g., smtp.gmail.com)
+     - `SMTP_PORT` - SMTP server port (e.g., 587)
 
-2. **RENDER_SERVICE_ID**
-   - Get from: Your service URL or Render dashboard
-   - Format: `srv-xxxxxxxxxxxxx`
+3. **Deploy**
+   - Push to `main` branch
+   - Render will automatically deploy!
+
+### Option 2: Manual Deploy Hook (Alternative)
+
+If you want to trigger deploys from GitHub Actions:
+
+1. **Get Deploy Hook from Render**
+   - Go to your service in Render Dashboard
+   - Click "Settings" → "Deploy Hook"
+   - Copy the webhook URL
+
+2. **Add GitHub Secret**
+   - Go to: GitHub repo → Settings → Secrets and variables → Actions
+   - Add `RENDER_DEPLOY_HOOK` with the webhook URL
 
 ## Render Configuration
 
