@@ -2,18 +2,20 @@ name: Go CI/CD
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
-  build-and-test:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
+    # 1️⃣ Checkout code
     - name: Checkout code
       uses: actions/checkout@v4
 
+    # 2️⃣ Setup Go
     - name: Setup Go
       uses: actions/setup-go@v5
       with:
@@ -21,15 +23,19 @@ jobs:
         check-latest: true
         cache: true
 
+    # 3️⃣ Install dependencies
     - name: Install dependencies
       run: go mod download
 
+    # 4️⃣ Run tests
     - name: Run tests
-      run: go test ./... -v || echo "⚠️  No tests found"
+      run: go test ./... -v || echo "⚠️ No tests found"
 
+    # 5️⃣ Build Go binary
     - name: Build App
       run: go build -o ums-backend main.go
 
+    # 6️⃣ Verify Build
     - name: Verify Build
       run: |
         if [ -f "ums-backend" ]; then
@@ -40,18 +46,26 @@ jobs:
           exit 1
         fi
 
+    # 7️⃣ Deploy to Render
+    - name: Deploy to Render
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      env:
+        RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+      run: |
+        if [ -z "$RENDER_DEPLOY_HOOK" ]; then
+          echo "⚠️ RENDER_DEPLOY_HOOK secret not configured"
+          echo "✅ Render will auto-deploy via GitHub integration"
+        else
+          echo "🚀 Triggering manual deploy via webhook..."
+          curl -X POST "$RENDER_DEPLOY_HOOK"
+          echo "✅ Deploy request sent!"
+        fi
+
+    # 8️⃣ Deployment Info
     - name: Deployment Info
       if: github.ref == 'refs/heads/main' && github.event_name == 'push'
       run: |
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "✅ Build passed successfully!"
-        echo "🚀 Render will auto-deploy this commit automatically"
-        echo ""
-        echo "📝 To enable manual deployment trigger:"
-        echo "   1. Go to: GitHub Settings → Secrets → Actions"
-        echo "   2. Add secret: RENDER_DEPLOY_HOOK"
-        echo "   3. Value: https://api.render.com/deploy/srv-d4jfdskhg0os73bos68g?key=8g9edUNfAMA"
-        echo ""
-        echo "🔍 Check deployment status:"
-        echo "   → https://dashboard.render.com/"
-        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "✅ Build & Deployment pipeline completed!"
+        echo "🔍 Check deployment status at: https://dashboard.render.com/"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
