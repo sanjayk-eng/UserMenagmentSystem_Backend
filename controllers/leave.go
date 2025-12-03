@@ -1059,7 +1059,6 @@ func (h *HandlerFunc) CancelLeave(c *gin.Context) {
 	// Parse leave ID from URL
 	leaveID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
-		fmt.Println("1")
 		utils.RespondWithError(c, 400, "Invalid leave ID")
 		return
 	}
@@ -1067,7 +1066,6 @@ func (h *HandlerFunc) CancelLeave(c *gin.Context) {
 	// Start transaction
 	tx, err := h.Query.DB.Beginx()
 	if err != nil {
-		fmt.Println("2", err.Error())
 		utils.RespondWithError(c, 500, "Failed to start transaction")
 		return
 	}
@@ -1077,14 +1075,12 @@ func (h *HandlerFunc) CancelLeave(c *gin.Context) {
 	var leave Leave
 	err = tx.Get(&leave, `SELECT * FROM Tbl_Leave WHERE id=$1 FOR UPDATE`, leaveID)
 	if err != nil {
-		fmt.Println("3", err.Error())
 		utils.RespondWithError(c, 404, "Leave not found")
 		return
 	}
 
 	// Permission check - employees can only cancel their own leaves
 	if role == "EMPLOYEE" && leave.EmployeeID != userID {
-		fmt.Println("2", err.Error())
 		utils.RespondWithError(c, 403, "You can only cancel your own leave applications")
 		return
 	}
