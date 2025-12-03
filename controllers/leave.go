@@ -464,7 +464,7 @@ func (s *HandlerFunc) ActionLeave(c *gin.Context) {
 			utils.RespondWithError(c, 500, "Failed to verify reporting relationship")
 			return
 		}
-		
+
 		if managerID != approverID {
 			utils.RespondWithError(c, 403, "You can only approve leaves of employees who report to you")
 			return
@@ -777,25 +777,30 @@ func (h *HandlerFunc) GetAllLeaves(c *gin.Context) {
 	// 4️⃣ Execute query with proper error handling
 	// Use Query instead of Queryx to avoid prepared statement caching issues
 	var result []models.LeaveResponse
-	
+
 	rows, err := h.Query.DB.Queryx(query, args...)
 	if err != nil {
 		// Log the error for debugging
 		fmt.Printf("❌ GetAllLeaves DB Error: %v\n", err)
 		fmt.Printf("Query: %s\n", query)
 		fmt.Printf("Args: %v\n", args)
-		
+
 		// Check for specific database errors
 		if strings.Contains(err.Error(), "does not exist") || strings.Contains(err.Error(), "unnamed prepared statement") {
 			utils.RespondWithError(c, http.StatusInternalServerError, "Database connection error. Please restart the application or contact administrator")
 			return
 		}
-		
+
 		utils.RespondWithError(c, http.StatusInternalServerError, "Failed to fetch leaves: "+err.Error())
 		return
 	}
 	defer rows.Close()
 
+	fmt.Println("row idsssss", rows)
+
+	if !rows.Next() {
+		return
+	}
 	// Scan results manually
 	for rows.Next() {
 		var leave models.LeaveResponse
@@ -1493,7 +1498,7 @@ func (h *HandlerFunc) GetManagerLeaveHistory(c *gin.Context) {
 		// Log the error for debugging
 		fmt.Printf("❌ GetManagerLeaveHistory DB Error: %v\n", err)
 		fmt.Printf("Manager ID: %s\n", currentUserID)
-		
+
 		utils.RespondWithError(c, http.StatusInternalServerError, "Failed to fetch team leave history: "+err.Error())
 		return
 	}
