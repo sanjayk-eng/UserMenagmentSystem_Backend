@@ -775,10 +775,10 @@ func (h *HandlerFunc) GetAllLeaves(c *gin.Context) {
 	query += " ORDER BY l.created_at DESC"
 
 	// 4️⃣ Execute query with proper error handling
-	// Use Queryx instead of Select to avoid prepared statement caching issues
+	// Use Query instead of Queryx to avoid prepared statement caching issues
 	var result []models.LeaveResponse
 	
-	rows, err := h.Query.DB.Queryx(query, args...)
+	rows, err := h.Query.DB.Query(query, args...)
 	if err != nil {
 		// Log the error for debugging
 		fmt.Printf("❌ GetAllLeaves DB Error: %v\n", err)
