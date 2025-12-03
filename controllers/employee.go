@@ -577,21 +577,32 @@ func (h *HandlerFunc) UpdateEmployeePassword(c *gin.Context) {
 			Email    string `db:"email"`
 			FullName string `db:"full_name"`
 		}
-		h.Query.DB.Get(&empDetails, "SELECT email, full_name FROM Tbl_Employee WHERE id=$1", empID)
+		err := h.Query.DB.Get(&empDetails, "SELECT email, full_name FROM Tbl_Employee WHERE id=$1", empID)
+		if err != nil {
+			fmt.Printf("Failed to fetch employee details for email notification: %v\n", err)
+			return
+		}
 
-		var updatedByName string
+		var updatedByEmail string
 		currentUserID := c.GetString("user_id")
-		h.Query.DB.Get(&updatedByName, "SELECT full_name FROM Tbl_Employee WHERE id=$1", currentUserID)
+		err = h.Query.DB.Get(&updatedByEmail, "SELECT email FROM Tbl_Employee WHERE id=$1", currentUserID)
+		if err != nil {
+			fmt.Printf("Failed to fetch updater email for email notification: %v\n", err)
+			updatedByEmail = "admin@zenithive.com" // Fallback email
+		}
 
-		err := utils.SendPasswordUpdateEmail(
+		fmt.Printf("Sending password update email to: %s\n", empDetails.Email)
+		err = utils.SendPasswordUpdateEmail(
 			empDetails.Email,
 			empDetails.FullName,
 			input.NewPassword,
-			updatedByName,
+			updatedByEmail,
 			role,
 		)
 		if err != nil {
 			fmt.Printf("Failed to send password update notification: %v\n", err)
+		} else {
+			fmt.Printf("Password update email sent successfully to: %s\n", empDetails.Email)
 		}
 	}()
 

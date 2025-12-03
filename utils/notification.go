@@ -25,6 +25,8 @@ func SendEmail(to, subject, body string) error {
 		return fmt.Errorf("GOOGLE_SCRIPT_URL environment variable is not set")
 	}
 
+	fmt.Printf("Attempting to send email to: %s with subject: %s\n", to, subject)
+
 	emailReq := EmailRequest{
 		To:      to,
 		Subject: subject,
@@ -50,6 +52,7 @@ func SendEmail(to, subject, body string) error {
 		return fmt.Errorf("email service returned status: %d", resp.StatusCode)
 	}
 
+	fmt.Printf("Email sent successfully to: %s\n", to)
 	return nil
 }
 
@@ -183,7 +186,7 @@ Zenithive Leave Management System
 }
 
 // SendPasswordUpdateEmail sends notification to employee when their password is updated by admin
-func SendPasswordUpdateEmail(employeeEmail, employeeName, newPassword, updatedBy, updatedByRole string) error {
+func SendPasswordUpdateEmail(employeeEmail, employeeName, newPassword, updatedByEmail, updatedByRole string) error {
 	subject := "Your Password Has Been Updated"
 	body := fmt.Sprintf(`
 Dear %s,
@@ -205,7 +208,7 @@ Login URL: [https://zenithiveapp.netlify.app]
 
 Best regards,
 Zenithive HR Team
-`, employeeName, updatedBy, updatedByRole, employeeEmail, newPassword)
+`, employeeName, updatedByEmail, updatedByRole, employeeEmail, newPassword)
 
 	return SendEmail(employeeEmail, subject, body)
 }
