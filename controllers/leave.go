@@ -775,65 +775,17 @@ func (h *HandlerFunc) GetAllLeaves(c *gin.Context) {
 	query += " ORDER BY l.created_at DESC"
 
 	// 4️⃣ Execute query with proper error handling
-	// Use Query instead of Queryx to avoid prepared statement caching issues
 	var result []models.LeaveResponse
 
-	rows, err := h.Query.DB.Queryx(query, args...)
+	// Use Select instead of Queryx to avoid prepared statement issues
+	err = h.Query.DB.Select(&result, query, args...)
 	if err != nil {
 		// Log the error for debugging
 		fmt.Printf("❌ GetAllLeaves DB Error: %v\n", err)
 		fmt.Printf("Query: %s\n", query)
 		fmt.Printf("Args: %v\n", args)
 
-		// Check for specific database errors
-		if strings.Contains(err.Error(), "does not exist") || strings.Contains(err.Error(), "unnamed prepared statement") {
-			utils.RespondWithError(c, http.StatusInternalServerError, "Database connection error. Please restart the application or contact administrator")
-			return
-		}
-
 		utils.RespondWithError(c, http.StatusInternalServerError, "Failed to fetch leaves: "+err.Error())
-		return
-	}
-	defer rows.Close()
-
-	fmt.Println("row idsssss", rows)
-
-	if !rows.Next() {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "Leaves fetched successfully",
-			"total":   len(result),
-			"role":    role,
-			"data":    result,
-		})
-	}
-
-	fmt.Println("row gdgbfsdfvs", rows)
-	// Scan results manually
-	for rows.Next() {
-		var leave models.LeaveResponse
-		err := rows.Scan(
-			&leave.ID,
-			&leave.Employee,
-			&leave.LeaveType,
-			&leave.StartDate,
-			&leave.EndDate,
-			&leave.Days,
-			&leave.Reason,
-			&leave.Status,
-			&leave.AppliedAt,
-		)
-		if err != nil {
-			fmt.Printf("❌ GetAllLeaves Scan Error: %v\n", err)
-			utils.RespondWithError(c, http.StatusInternalServerError, "Failed to parse leave data: "+err.Error())
-			return
-		}
-		result = append(result, leave)
-	}
-
-	// Check for errors from iterating over rows
-	if err = rows.Err(); err != nil {
-		fmt.Printf("❌ GetAllLeaves Rows Error: %v\n", err)
-		utils.RespondWithError(c, http.StatusInternalServerError, "Error reading leave data: "+err.Error())
 		return
 	}
 
