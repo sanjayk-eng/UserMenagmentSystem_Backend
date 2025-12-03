@@ -799,8 +799,15 @@ func (h *HandlerFunc) GetAllLeaves(c *gin.Context) {
 	fmt.Println("row idsssss", rows)
 
 	if !rows.Next() {
-		return
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Leaves fetched successfully",
+			"total":   len(result),
+			"role":    role,
+			"data":    result,
+		})
 	}
+
+	fmt.Println("row gdgbfsdfvs", rows)
 	// Scan results manually
 	for rows.Next() {
 		var leave models.LeaveResponse
