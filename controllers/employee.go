@@ -20,6 +20,7 @@ type UpdateManagerInput struct {
 }
 
 // GetEmployees - GET /api/employees
+// Query params: ?role=EMPLOYEE&designation=Senior Developer
 func (h *HandlerFunc) GetEmployee(c *gin.Context) {
 	role, _ := c.Get("role")
 	r := role.(string)
@@ -29,7 +30,11 @@ func (h *HandlerFunc) GetEmployee(c *gin.Context) {
 		return
 	}
 
-	employees, err := h.Query.GetAllEmployees()
+	// Get filter parameters from query string
+	roleFilter := c.Query("role")               // e.g., ?role=EMPLOYEE
+	designationFilter := c.Query("designation") // e.g., ?designation=Senior Developer
+
+	employees, err := h.Query.GetAllEmployees(roleFilter, designationFilter)
 	if err != nil {
 		utils.RespondWithError(c, http.StatusInternalServerError, err.Error())
 		return
@@ -38,6 +43,10 @@ func (h *HandlerFunc) GetEmployee(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message":   "Employees fetched",
 		"employees": employees,
+		"filters": gin.H{
+			"role":        roleFilter,
+			"designation": designationFilter,
+		},
 	})
 }
 

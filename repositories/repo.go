@@ -47,7 +47,8 @@ func (r *Repository) GetEmployeeByEmail(email string) (EmployeeAuthData, error) 
 	return emp, err
 }
 
-func (r *Repository) GetAllEmployees() ([]models.EmployeeInput, error) {
+func (r *Repository) GetAllEmployees(roleFilter, designationFilter string) ([]models.EmployeeInput, error) {
+	// Build dynamic query with optional filters
 	query := `
         SELECT 
             e.id, e.full_name, e.email, e.status,
@@ -56,10 +57,30 @@ func (r *Repository) GetAllEmployees() ([]models.EmployeeInput, error) {
             e.created_at, e.updated_at, e.deleted_at
         FROM Tbl_Employee e
         JOIN Tbl_Role r ON e.role_id = r.id
-        ORDER BY e.full_name
+        LEFT JOIN Tbl_Designation d ON e.designation_id = d.id
+        WHERE 1=1
     `
 
-	rows, err := r.DB.Query(query)
+	args := []interface{}{}
+	argCount := 1
+
+	// Add role filter if provided
+	if roleFilter != "" {
+		query += fmt.Sprintf(" AND r.type = $%d", argCount)
+		args = append(args, roleFilter)
+		argCount++
+	}
+
+	// Add designation filter if provided
+	if designationFilter != "" {
+		query += fmt.Sprintf(" AND d.designation_name = $%d", argCount)
+		args = append(args, designationFilter)
+		argCount++
+	}
+
+	query += " ORDER BY e.full_name"
+
+	rows, err := r.DB.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +378,7 @@ func (r *Repository) GetEmployeeByID(empID uuid.UUID) (*models.EmployeeInput, er
         SELECT 
             e.id, e.full_name, e.email, e.status,
             r.type AS role, e.manager_id, e.designation_id,
-            e.salary, e.joining_date, e.ending_date,
+            e.joining_date, e.ending_date,
             e.created_at, e.updated_at, e.deleted_at
         FROM Tbl_Employee e
         JOIN Tbl_Role r ON e.role_id = r.id
@@ -372,7 +393,6 @@ func (r *Repository) GetEmployeeByID(empID uuid.UUID) (*models.EmployeeInput, er
 		&emp.Role,
 		&emp.ManagerID,
 		&emp.DesignationID,
-		&emp.Salary,
 		&emp.JoiningDate,
 		&emp.EndingDate,
 		&emp.CreatedAt,

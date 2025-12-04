@@ -782,8 +782,8 @@ func (h *HandlerFunc) GetAllLeaves(c *gin.Context) {
 
 		err = h.Query.DB.Select(&result, query, userID)
 
-	case "ADMIN", "SUPERADMIN":
-		// Admin and SuperAdmin can see all leaves
+	case "HR", "ADMIN", "SUPERADMIN":
+		// HR, Admin and SuperAdmin can see all leaves
 		query := `
 		SELECT 
 			l.id,
