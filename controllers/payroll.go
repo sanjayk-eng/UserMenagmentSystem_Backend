@@ -45,11 +45,10 @@ func (h *HandlerFunc) RunPayroll(c *gin.Context) {
 	}
 
 	now := time.Now()
-	if input.Year > now.Year() || (input.Year == now.Year() && input.Month >=int(now.Month())) {
+	if input.Year > now.Year() || (input.Year == now.Year() && input.Month >= int(now.Month())) {
 		utils.RespondWithError(c, http.StatusBadRequest, "Cannot run payroll for future months")
 		return
 	}
-
 
 	// --- Check if payroll already exists ---
 	var existingRun struct {
@@ -61,16 +60,16 @@ func (h *HandlerFunc) RunPayroll(c *gin.Context) {
         FROM Tbl_Payroll_run 
         WHERE month=$1 AND year=$2
     `, input.Month, input.Year)
-	
+
 	if err == nil {
 		// Payroll run exists
 		status := strings.ToUpper(strings.TrimSpace(existingRun.Status))
-		
+
 		if status == "FINALIZED" {
 			utils.RespondWithError(c, 400, "Payroll for this month and year is already finalized. Cannot run payroll again.")
 			return
 		}
-		
+
 		if status == "PREVIEW" {
 			utils.RespondWithError(c, 400, fmt.Sprintf("Payroll for this month and year already exists with status PREVIEW (ID: %s). Please finalize or delete the existing payroll run before creating a new one.", existingRun.ID))
 			return
@@ -81,7 +80,7 @@ func (h *HandlerFunc) RunPayroll(c *gin.Context) {
 	var employees []struct {
 		ID          uuid.UUID `db:"id"`
 		FullName    string    `db:"full_name"`
-		Salary      float64   `db:"salary"`
+		Salary      *float64  `db:"salary"`
 		Status      string    `db:"status"`
 		JoiningDate time.Time `db:"joining_date"`
 	}
@@ -115,6 +114,13 @@ func (h *HandlerFunc) RunPayroll(c *gin.Context) {
 	var previews []PayrollPreview
 
 	for _, emp := range employees {
+		// Skip employees without salary
+		if emp.Salary == nil || *emp.Salary == 0 {
+			continue
+		}
+
+		salary := *emp.Salary
+
 		// Calculate absent days for this specific month only
 		// Handle cross-month leaves correctly
 		absentDays := calculateAbsentDaysForMonth(h.Query.DB, emp.ID, input.Month, input.Year)
@@ -123,13 +129,13 @@ func (h *HandlerFunc) RunPayroll(c *gin.Context) {
 			return
 		}
 
-		deduction := emp.Salary / float64(workingDays) * absentDays
-		net := emp.Salary - deduction
+		deduction := salary / float64(workingDays) * absentDays
+		net := salary - deduction
 
 		previews = append(previews, PayrollPreview{
 			EmployeeID:  emp.ID,
 			Employee:    emp.FullName,
-			BasicSalary: emp.Salary,
+			BasicSalary: salary,
 			WorkingDays: workingDays,
 			AbsentDays:  int(absentDays),
 			Deductions:  deduction,
@@ -198,7 +204,7 @@ func (h *HandlerFunc) FinalizePayroll(c *gin.Context) {
 		utils.RespondWithError(c, 400, "Payroll is already finalized. Cannot finalize again. Finalized payrolls are locked and cannot be modified.")
 		return
 	}
-	
+
 	// --- Block if not in PREVIEW status ---
 	if strings.ToUpper(strings.TrimSpace(run.Status)) != "PREVIEW" {
 		utils.RespondWithError(c, 400, fmt.Sprintf("Cannot finalize payroll with status: %s. Only PREVIEW payrolls can be finalized.", run.Status))
@@ -225,7 +231,7 @@ func (h *HandlerFunc) FinalizePayroll(c *gin.Context) {
 	var employees []struct {
 		ID       uuid.UUID `db:"id"`
 		FullName string    `db:"full_name"`
-		Salary   float64   `db:"salary"`
+		Salary   *float64  `db:"salary"`
 	}
 
 	err = tx.Select(&employees, `
@@ -249,6 +255,13 @@ func (h *HandlerFunc) FinalizePayroll(c *gin.Context) {
 	var payslipIDs []uuid.UUID
 
 	for _, emp := range employees {
+		// Skip employees without salary
+		if emp.Salary == nil || *emp.Salary == 0 {
+			continue
+		}
+
+		salary := *emp.Salary
+
 		// Calculate absent days for this specific month only
 		// Handle cross-month leaves correctly
 		absentDays := calculateAbsentDaysForMonth(h.Query.DB, emp.ID, run.Month, run.Year)
@@ -257,15 +270,15 @@ func (h *HandlerFunc) FinalizePayroll(c *gin.Context) {
 			return
 		}
 
-		deduction := emp.Salary / float64(workingDays) * absentDays
-		net := emp.Salary - deduction
+		deduction := salary / float64(workingDays) * absentDays
+		net := salary - deduction
 
 		pID := uuid.New()
 		_, err = tx.Exec(`
 			INSERT INTO Tbl_Payslip 
 			(id, payroll_run_id, employee_id, basic_salary, working_days, absent_days, deduction_amount, net_salary)
 			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-		`, pID, runID, emp.ID, emp.Salary, workingDays, int(absentDays), deduction, net)
+		`, pID, runID, emp.ID, salary, workingDays, int(absentDays), deduction, net)
 
 		if err != nil {
 			utils.RespondWithError(c, 500, "Payslip insert failed: "+err.Error())
@@ -574,7 +587,7 @@ func (h *HandlerFunc) GetFinalizedPayslips(c *gin.Context) {
 		utils.RespondWithError(c, 500, "Failed to fetch payslips: "+err.Error())
 		return
 	}
-	
+
 	// Only defer close if rows is not nil
 	if rows != nil {
 		defer rows.Close()
@@ -874,7 +887,6 @@ func (h *HandlerFunc) WithdrawPayslip(c *gin.Context) {
 	// Should not reach here
 	utils.RespondWithError(c, 500, "Unexpected error in payslip withdrawal process")
 }
-
 
 // calculateAbsentDaysForMonth calculates the number of absent days for a specific month
 // Handles cross-month leaves correctly by counting only days within the payroll month
