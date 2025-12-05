@@ -70,10 +70,10 @@ func (h *HandlerFunc) RunPayroll(c *gin.Context) {
 			return
 		}
 
-		if status == "PREVIEW" {
-			utils.RespondWithError(c, 400, fmt.Sprintf("Payroll for this month and year already exists with status PREVIEW (ID: %s). Please finalize or delete the existing payroll run before creating a new one.", existingRun.ID))
-			return
-		}
+		// if status == "PREVIEW" {
+		// 	utils.RespondWithError(c, 400, fmt.Sprintf("Payroll for this month and year already exists with status PREVIEW (ID: %s). Please finalize or delete the existing payroll run before creating a new one.", existingRun.ID))
+		// 	return
+		// }
 	}
 
 	// --- Fetch active employees ---
