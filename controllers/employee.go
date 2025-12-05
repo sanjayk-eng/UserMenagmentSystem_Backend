@@ -134,6 +134,12 @@ func (h *HandlerFunc) CreateEmployee(c *gin.Context) {
 		return
 	}
 
+	// SET DEFAULT SALARY TO 0 IF NOT PROVIDED
+	if input.Salary == nil {
+		zeroSalary := 0.0
+		input.Salary = &zeroSalary
+	}
+
 	// INSERT
 	err = h.Query.InsertEmployee(
 		input.FullName, input.Email,

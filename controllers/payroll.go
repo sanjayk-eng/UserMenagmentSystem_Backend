@@ -114,12 +114,11 @@ func (h *HandlerFunc) RunPayroll(c *gin.Context) {
 	var previews []PayrollPreview
 
 	for _, emp := range employees {
-		// Skip employees without salary
-		if emp.Salary == nil || *emp.Salary == 0 {
-			continue
+		// Set default salary to 0 if null
+		salary := 0.0
+		if emp.Salary != nil {
+			salary = *emp.Salary
 		}
-
-		salary := *emp.Salary
 
 		// Calculate absent days for this specific month only
 		// Handle cross-month leaves correctly
@@ -255,12 +254,11 @@ func (h *HandlerFunc) FinalizePayroll(c *gin.Context) {
 	var payslipIDs []uuid.UUID
 
 	for _, emp := range employees {
-		// Skip employees without salary
-		if emp.Salary == nil || *emp.Salary == 0 {
-			continue
+		// Set default salary to 0 if null
+		salary := 0.0
+		if emp.Salary != nil {
+			salary = *emp.Salary
 		}
-
-		salary := *emp.Salary
 
 		// Calculate absent days for this specific month only
 		// Handle cross-month leaves correctly
