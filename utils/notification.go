@@ -127,27 +127,23 @@ func SendLeaveManagerRejectionEmail(
 	// EMPLOYEE EMAIL (Step 1)
 	// ------------------------
 	empBody := fmt.Sprintf(`
-<div style="font-family: Arial, sans-serif; line-height: 1.6; font-size: 15px;">
-<p><strong>Dear %s,</strong></p>
+Dear %s,
 
-<p>Your leave application has been <strong style="color:#d9534f;">REJECTED</strong> by your manager <strong>%s</strong>.</p>
+Your leave request has been REJECTED by your manager %s.
 
-<p>This is the first-level rejection.  
-The request is now forwarded to <strong>Admin/SuperAdmin</strong> for final review.</p>
+This is a first-level rejection. The request has now been forwarded to Admin/SuperAdmin for final review.
 
-<p>
-<strong>Leave Type:</strong> %s<br>
-<strong>Start Date:</strong> %s<br>
-<strong>End Date:</strong> %s<br>
-<strong>Duration:</strong> %.1f days<br>
-<strong>Status:</strong> <span style="color:#d9534f;">MANAGER_REJECTED</span>
-</p>
+Leave Details:
+- Leave Type: %s
+- Start Date: %s
+- End Date: %s
+- Duration: %.1f days
+- Status: MANAGER_REJECTED
 
-<p>For more information, please contact your manager.</p>
+For more information, please contact your manager.
 
-<p>Best regards,<br>
-<strong>Zenithive Leave Management System</strong></p>
-</div>
+Best regards,
+Zenithive Leave Management System
 `, employeeName, rejectedBy, leaveType, startDate, endDate, days)
 
 	if err := SendEmail(empEmail, subject, empBody); err != nil {
@@ -158,27 +154,24 @@ The request is now forwarded to <strong>Admin/SuperAdmin</strong> for final revi
 	// ADMIN EMAIL (Step 1)
 	// ------------------------
 	adminBody := fmt.Sprintf(`
-<div style="font-family: Arial, sans-serif; line-height: 1.6; font-size: 15px;">
-<p><strong>Dear Admin,</strong></p>
+Dear Admin,
 
-<p>A leave request has been <strong style="color:#d9534f;">REJECTED</strong> at manager level by <strong>%s</strong>.</p>
+A leave request has been REJECTED at manager level by %s.
 
-<p>This leave now requires <strong>final rejection approval</strong> from Admin/SuperAdmin.</p>
+This leave now requires final rejection approval from Admin/SuperAdmin.
 
-<p>
-<strong>Employee:</strong> %s<br>
-<strong>Leave Type:</strong> %s<br>
-<strong>Start Date:</strong> %s<br>
-<strong>End Date:</strong> %s<br>
-<strong>Duration:</strong> %.1f days<br>
-<strong>Status:</strong> <span style="color:#d9534f;">MANAGER_REJECTED</span>
-</p>
+Leave Details:
+- Employee: %s
+- Leave Type: %s
+- Start Date: %s
+- End Date: %s
+- Duration: %.1f days
+- Status: MANAGER_REJECTED
 
-<p>Please log in to the admin panel to complete the final review.</p>
+Please log in to the admin panel to complete the final review.
 
-<p>Best regards,<br>
-<strong>Zenithive Leave Management System</strong></p>
-</div>
+Best regards,
+Zenithive Leave Management System
 `, rejectedBy, employeeName, leaveType, startDate, endDate, days)
 
 	for _, email := range AdminEmail {
@@ -203,24 +196,21 @@ func SendLeaveManagerApprovalEmail(
 	// 1) EMPLOYEE EMAIL
 	// ------------------------
 	empBody := fmt.Sprintf(`
-<div style="font-family: Arial, sans-serif; line-height: 1.6; font-size: 15px;">
-<p><strong>Dear %s,</strong></p>
+Dear %s,
 
-<p>Your leave application has been <strong style="color:#5cb85c;">APPROVED</strong> by your manager <strong>%s</strong>.</p>
+Your leave application has been APPROVED by your manager %s.
 
-<p>
-<strong>Leave Type:</strong> %s<br>
-<strong>Start Date:</strong> %s<br>
-<strong>End Date:</strong> %s<br>
-<strong>Duration:</strong> %.1f days<br>
-<strong>Status:</strong> <span style="color:#5cb85c;">MANAGER APPROVED</span>
-</p>
+Leave Details:
+- Leave Type: %s
+- Start Date: %s
+- End Date: %s
+- Duration: %.1f days
+- Status: MANAGER APPROVED
 
-<p>Note: Your leave is pending final approval from ADMIN/SUPERADMIN.</p>
+Note: Your leave is now pending final approval from Admin/SuperAdmin.
 
-<p>Best regards,<br>
-<strong>Zenithive Leave Management System</strong></p>
-</div>
+Best regards,
+Zenithive Leave Management System
 `, employeeName, approvedBy, leaveType, startDate, endDate, days)
 
 	if err := SendEmail(employeeEmail, subject, empBody); err != nil {
@@ -228,28 +218,25 @@ func SendLeaveManagerApprovalEmail(
 	}
 
 	// ------------------------
-	// 2) ADMIN EMAIL TEMPLATE
+	// 2) ADMIN EMAIL
 	// ------------------------
 	adminBody := fmt.Sprintf(`
-<div style="font-family: Arial, sans-serif; line-height: 1.6; font-size: 15px;">
-<p><strong>Dear Admin,</strong></p>
+Dear Admin,
 
-<p>A leave request has been <strong style="color:#5cb85c;">APPROVED</strong> by manager <strong>%s</strong>.</p>
+A leave request has been APPROVED by the manager %s.
 
-<p>
-<strong>Employee:</strong> %s<br>
-<strong>Leave Type:</strong> %s<br>
-<strong>Start Date:</strong> %s<br>
-<strong>End Date:</strong> %s<br>
-<strong>Duration:</strong> %.1f days<br>
-<strong>Status:</strong> <span style="color:#5cb85c;">MANAGER APPROVED</span>
-</p>
+Leave Details:
+- Employee: %s
+- Leave Type: %s
+- Start Date: %s
+- End Date: %s
+- Duration: %.1f days
+- Status: MANAGER APPROVED
 
-<p>Please review and take final action.</p>
+Please review and take final action.
 
-<p>Best regards,<br>
-<strong>Zenithive Leave Management System</strong></p>
-</div>
+Best regards,
+Zenithive Leave Management System
 `, approvedBy, employeeName, leaveType, startDate, endDate, days)
 
 	for _, email := range AdminEmail {
@@ -274,24 +261,21 @@ func SendLeaveFinalApprovalEmail(
 	// 1) EMPLOYEE EMAIL
 	// ------------------------
 	empBody := fmt.Sprintf(`
-<div style="font-family: Arial, sans-serif; line-height: 1.6; font-size: 15px;">
-<p><strong>Dear %s,</strong></p>
+Dear %s,
 
-<p>Your leave application has been <strong style="color:#5cb85c;">APPROVED</strong> by <strong>%s</strong>.</p>
+Your leave application has been APPROVED by %s.
 
-<p>
-<strong>Leave Type:</strong> %s<br>
-<strong>Start Date:</strong> %s<br>
-<strong>End Date:</strong> %s<br>
-<strong>Duration:</strong> %.1f days<br>
-<strong>Status:</strong> <span style="color:#5cb85c;">APPROVED</span>
-</p>
+Leave Details:
+- Leave Type: %s
+- Start Date: %s
+- End Date: %s
+- Duration: %.1f days
+- Status: APPROVED
 
-<p>Enjoy your time off!</p>
+Enjoy your time off!
 
-<p>Best regards,<br>
-<strong>Zenithive Leave Management System</strong></p>
-</div>
+Best regards,
+Zenithive Leave Management System
 `, employeeName, approvedBy, leaveType, startDate, endDate, days)
 
 	if err := SendEmail(employeeEmail, subject, empBody); err != nil {
@@ -299,25 +283,22 @@ func SendLeaveFinalApprovalEmail(
 	}
 
 	// ------------------------
-	// 2) ADMIN EMAIL TEMPLATE
+	// 2) ADMIN EMAIL
 	// ------------------------
 	adminBody := fmt.Sprintf(`
-<div style="font-family: Arial, sans-serif; line-height: 1.6; font-size: 15px;">
-<p><strong>Dear Admin,</strong></p>
+Dear Admin,
 
-<p>The leave request of employee <strong>%s</strong> has been <strong style="color:#5cb85c;">APPROVED</strong> by <strong>%s</strong>.</p>
+The leave request for employee %s has been APPROVED by %s.
 
-<p>
-<strong>Leave Type:</strong> %s<br>
-<strong>Start Date:</strong> %s<br>
-<strong>End Date:</strong> %s<br>
-<strong>Duration:</strong> %.1f days<br>
-<strong>Status:</strong> <span style="color:#5cb85c;">APPROVED</span>
-</p>
+Leave Details:
+- Leave Type: %s
+- Start Date: %s
+- End Date: %s
+- Duration: %.1f days
+- Status: APPROVED
 
-<p>Best regards,<br>
-<strong>Zenithive Leave Management System</strong></p>
-</div>
+Best regards,
+Zenithive Leave Management System
 `, employeeName, approvedBy, leaveType, startDate, endDate, days)
 
 	for _, email := range AdminEmail {
@@ -343,24 +324,21 @@ func SendLeaveRejectionEmail(
 	// 1) EMPLOYEE EMAIL
 	// ------------------------
 	empBody := fmt.Sprintf(`
-<div style="font-family: Arial, sans-serif; line-height: 1.6; font-size: 15px;">
-<p><strong>Dear %s,</strong></p>
+Dear %s,
 
-<p>We regret to inform you that your leave application has been <strong style="color:#d9534f;">REJECTED</strong> by <strong>%s</strong>.</p>
+We regret to inform you that your leave application has been REJECTED by %s.
 
-<p>
-<strong>Leave Type:</strong> %s<br>
-<strong>Start Date:</strong> %s<br>
-<strong>End Date:</strong> %s<br>
-<strong>Duration:</strong> %.1f days<br>
-<strong>Status:</strong> <span style="color:#d9534f;">REJECTED</span>
-</p>
+Leave Details:
+- Leave Type: %s
+- Start Date: %s
+- End Date: %s
+- Duration: %.1f days
+- Status: REJECTED
 
-<p>Please contact your manager for more information.</p>
+Please contact your manager if you require more information.
 
-<p>Best regards,<br>
-<strong>Zenithive Leave Management System</strong></p>
-</div>
+Best regards,
+Zenithive Leave Management System
 `, employeeName, rejectedBy, leaveType, startDate, endDate, days)
 
 	if err := SendEmail(empEmail, subject, empBody); err != nil {
@@ -368,26 +346,23 @@ func SendLeaveRejectionEmail(
 	}
 
 	// ------------------------
-	// 2) ADMIN EMAIL TEMPLATE
+	// 2) ADMIN EMAIL
 	// ------------------------
 	adminBody := fmt.Sprintf(`
-<div style="font-family: Arial, sans-serif; line-height: 1.6; font-size: 15px;">
-<p><strong>Dear Admin,</strong></p>
+Dear Admin,
 
-<p>A leave request has been <strong style="color:#d9534f;">REJECTED</strong> by <strong>%s</strong>.</p>
+A leave request has been REJECTED by %s.
 
-<p>
-<strong>Employee:</strong> %s<br>
-<strong>Leave Type:</strong> %s<br>
-<strong>Start Date:</strong> %s<br>
-<strong>End Date:</strong> %s<br>
-<strong>Duration:</strong> %.1f days<br>
-<strong>Status:</strong> <span style="color:#d9534f;">REJECTED</span>
-</p>
+Leave Details:
+- Employee: %s
+- Leave Type: %s
+- Start Date: %s
+- End Date: %s
+- Duration: %.1f days
+- Status: REJECTED
 
-<p>Best regards,<br>
-<strong>Zenithive Leave Management System</strong></p>
-</div>
+Best regards,
+Zenithive Leave Management System
 `, rejectedBy, employeeName, leaveType, startDate, endDate, days)
 
 	for _, email := range AdminEmail {
@@ -526,33 +501,30 @@ func SendLeaveWithdrawalEmail(
 	// Optional reason text
 	reasonText := ""
 	if reason != "" {
-		reasonText = fmt.Sprintf("<br><strong>Reason:</strong> %s", reason)
+		reasonText = fmt.Sprintf("\nReason: %s", reason)
 	}
 
 	// ------------------------
 	// 1) EMPLOYEE EMAIL
 	// ------------------------
 	empBody := fmt.Sprintf(`
-<div style="font-family: Arial, sans-serif; line-height: 1.6; font-size: 15px;">
-<p><strong>Dear %s,</strong></p>
+Dear %s,
 
-<p>Your approved leave request has been <strong style="color:#f0ad4e;">WITHDRAWN</strong> by %s (%s).</p>
+Your approved leave request has been WITHDRAWN by %s (%s).
 
-<p>
-<strong>Leave Type:</strong> %s<br>
-<strong>Start Date:</strong> %s<br>
-<strong>End Date:</strong> %s<br>
-<strong>Duration:</strong> %.1f days<br>
-<strong>Status:</strong> <span style="color:#f0ad4e;">WITHDRAWN</span>%s
-</p>
+Leave Details:
+- Leave Type: %s
+- Start Date: %s
+- End Date: %s
+- Duration: %.1f days
+- Status: WITHDRAWN%s
 
-<p>Your leave balance has been restored. The %.1f days have been credited back to your account.</p>
+Your leave balance has been restored. The %.1f days have been credited back to your account.
 
-<p>If you have any questions about this withdrawal, please contact your manager or HR department.</p>
+If you have any questions regarding this withdrawal, please contact your manager or HR department.
 
-<p>Best regards,<br>
-<strong>Zenithive Leave Management System</strong></p>
-</div>
+Best regards,
+Zenithive Leave Management System
 `, employeeName, withdrawnBy, withdrawnByRole, leaveType, startDate, endDate, days, reasonText, days)
 
 	if err := SendEmail(employeeEmail, subject, empBody); err != nil {
@@ -560,27 +532,24 @@ func SendLeaveWithdrawalEmail(
 	}
 
 	// ------------------------
-	// 2) ADMIN EMAIL TEMPLATE
+	// 2) ADMIN EMAIL
 	// ------------------------
 	adminBody := fmt.Sprintf(`
-<div style="font-family: Arial, sans-serif; line-height: 1.6; font-size: 15px;">
-<p><strong>Dear Admin,</strong></p>
+Dear Admin,
 
-<p>The leave request of employee <strong>%s</strong> has been <strong style="color:#f0ad4e;">WITHDRAWN</strong> by %s (%s).</p>
+The leave request of employee %s has been WITHDRAWN by %s (%s).
 
-<p>
-<strong>Leave Type:</strong> %s<br>
-<strong>Start Date:</strong> %s<br>
-<strong>End Date:</strong> %s<br>
-<strong>Duration:</strong> %.1f days<br>
-<strong>Status:</strong> <span style="color:#f0ad4e;">WITHDRAWN</span>%s
-</p>
+Leave Details:
+- Leave Type: %s
+- Start Date: %s
+- End Date: %s
+- Duration: %.1f days
+- Status: WITHDRAWN%s
 
-<p>The employee's leave balance has been restored.</p>
+The employee's leave balance has been restored.
 
-<p>Best regards,<br>
-<strong>Zenithive Leave Management System</strong></p>
-</div>
+Best regards,
+Zenithive Leave Management System
 `, employeeName, withdrawnBy, withdrawnByRole, leaveType, startDate, endDate, days, reasonText)
 
 	for _, email := range adminEmails {
