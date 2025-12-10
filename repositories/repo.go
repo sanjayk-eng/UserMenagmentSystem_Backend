@@ -141,6 +141,41 @@ func (r *Repository) GetAllEmployees(roleFilter, designationFilter string) ([]mo
 	return employees, nil
 }
 
+// ------------------ GET ADMIN AND EMPLOYEE EMAIL ------------------
+
+func (r *Repository) GetAdminAndEmployeeEmail(id uuid.UUID) ([]string, error) {
+	var recipients []string
+	var managerEmail string
+	err := r.DB.Get(&managerEmail, `
+			SELECT e2.email 
+			FROM Tbl_Employee e1
+			JOIN Tbl_Employee e2 ON e1.manager_id = e2.id
+			WHERE e1.id = $1
+		`, id)
+	if err == nil && managerEmail != "" {
+		recipients = append(recipients, managerEmail)
+	}
+	var adminEmails []string
+	r.DB.Select(&adminEmails, `
+			SELECT e.email 
+			FROM Tbl_Employee e
+			JOIN Tbl_Role r ON e.role_id = r.id
+			WHERE r.type IN ('ADMIN', 'SUPERADMIN') AND e.status = 'active'
+		`)
+	recipients = append(recipients, adminEmails...)
+
+	return recipients, nil
+}
+
+func (r *Repository) GetEmployeeDetailsForNotification(id uuid.UUID) (empDetails struct {
+	Email    string `db:"email"`
+	FullName string `db:"full_name"`
+}, err error) {
+	err = r.DB.Get(&empDetails, "SELECT email, full_name FROM Tbl_Employee WHERE id=$1", id)
+	return empDetails, err
+
+}
+
 func (r *Repository) DeleteEmployeeStatus(id uuid.UUID) (string, error) {
 
 	// Get current status

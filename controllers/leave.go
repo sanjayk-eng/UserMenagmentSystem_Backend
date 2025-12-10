@@ -251,41 +251,20 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 	// Send notification to manager/admin (async)
 	go func() {
 		// Get employee details
-		var empDetails struct {
-			Email    string `db:"email"`
-			FullName string `db:"full_name"`
-		}
-		h.Query.DB.Get(&empDetails, "SELECT email, full_name FROM Tbl_Employee WHERE id=$1", employeeID)
 
 		// Get leave type name
 		var leaveTypeName string
 		h.Query.DB.Get(&leaveTypeName, "SELECT name FROM Tbl_Leave_type WHERE id=$1", input.LeaveTypeID)
 
-		// Get manager and admin emails
-		var recipients []string
-
-		// Get manager email
-		var managerEmail string
-		err := h.Query.DB.Get(&managerEmail, `
-			SELECT e2.email 
-			FROM Tbl_Employee e1
-			JOIN Tbl_Employee e2 ON e1.manager_id = e2.id
-			WHERE e1.id = $1
-		`, employeeID)
-		if err == nil && managerEmail != "" {
-			recipients = append(recipients, managerEmail)
+		recipients, err := h.Query.GetAdminAndEmployeeEmail(employeeID)
+		if err != nil {
+			fmt.Printf("Failed to get notification recipients , email: %v\n", err)
 		}
 
-		// Get all admin and superadmin emails
-		var adminEmails []string
-		h.Query.DB.Select(&adminEmails, `
-			SELECT e.email 
-			FROM Tbl_Employee e
-			JOIN Tbl_Role r ON e.role_id = r.id
-			WHERE r.type IN ('ADMIN', 'SUPERADMIN') AND e.status = 'active'
-		`)
-		recipients = append(recipients, adminEmails...)
-
+		empDetails, err := h.Query.GetEmployeeDetailsForNotification(employeeID)
+		if err != nil {
+			fmt.Printf("Failed to get employee details for notification: %v\n", err)
+		}
 		// Send notification to all recipients
 		if len(recipients) > 0 {
 			err := utils.SendLeaveApplicationEmail(
@@ -498,7 +477,41 @@ func (s *HandlerFunc) ActionLeave(c *gin.Context) {
 				return
 			}
 
+			empDetails, err := s.Query.GetEmployeeDetailsForNotification(leave.EmployeeID)
+			if err != nil {
+				fmt.Printf("Failed to get employee details for notification: %v\n", err)
+			}
+
+			var leaveTypeName string
+			s.Query.DB.Get(&leaveTypeName, "SELECT name FROM Tbl_Leave_type WHERE id=$1", leave.LeaveTypeID)
+
+			// Fetch approver's full name
+			var approverName string
+			s.Query.DB.Get(&approverName, "SELECT full_name FROM Tbl_Employee WHERE id=$1", approverID)
+
+			recipients, err := s.Query.GetAdminAndEmployeeEmail(leave.EmployeeID)
+			if err != nil {
+				fmt.Printf("Failed to get admin and employee emails for notification: %v\n", err)
+			}
+			recipients = append(recipients)
+
 			tx.Commit()
+
+			// Send final rejection notification
+			if len(recipients) > 0 {
+				go func() {
+					utils.SendLeaveManagerRejectionEmail(
+						recipients,
+						empDetails.Email,
+						empDetails.FullName,
+						leaveTypeName,
+						leave.StartDate.Format("2006-01-02"),
+						leave.EndDate.Format("2006-01-02"),
+						leave.Days,
+						approverName,
+					)
+				}()
+			}
 
 			c.JSON(200, gin.H{
 				"message": "Leave rejected by manager. Pending final rejection from ADMIN/SUPERADMIN",
@@ -516,11 +529,10 @@ func (s *HandlerFunc) ActionLeave(c *gin.Context) {
 			}
 
 			// Fetch employee details
-			var empDetails struct {
-				Email    string `db:"email"`
-				FullName string `db:"full_name"`
+			empDetails, err := s.Query.GetEmployeeDetailsForNotification(leave.EmployeeID)
+			if err != nil {
+				fmt.Printf("Failed to get employee details for notification: %v\n", err)
 			}
-			s.Query.DB.Get(&empDetails, "SELECT email, full_name FROM Tbl_Employee WHERE id=$1", leave.EmployeeID)
 
 			var leaveTypeName string
 			s.Query.DB.Get(&leaveTypeName, "SELECT name FROM Tbl_Leave_type WHERE id=$1", leave.LeaveTypeID)
@@ -529,12 +541,19 @@ func (s *HandlerFunc) ActionLeave(c *gin.Context) {
 			var approverName string
 			s.Query.DB.Get(&approverName, "SELECT full_name FROM Tbl_Employee WHERE id=$1", approverID)
 
+			recipients, err := s.Query.GetAdminAndEmployeeEmail(leave.EmployeeID)
+			if err != nil {
+				fmt.Printf("Failed to get admin and employee emails for notification: %v\n", err)
+			}
+			recipients = append(recipients)
+
 			tx.Commit()
 
 			// Send final rejection notification
-			if empDetails.Email != "" {
+			if len(recipients) > 0 {
 				go func() {
 					utils.SendLeaveRejectionEmail(
+						recipients,
 						empDetails.Email,
 						empDetails.FullName,
 						leaveTypeName,
@@ -589,7 +608,40 @@ func (s *HandlerFunc) ActionLeave(c *gin.Context) {
 			return
 		}
 
+		empDetails, err := s.Query.GetEmployeeDetailsForNotification(leave.EmployeeID)
+		if err != nil {
+			fmt.Printf("Failed to get employee details for notification: %v\n", err)
+		}
+
+		var leaveTypeName string
+		s.Query.DB.Get(&leaveTypeName, "SELECT name FROM Tbl_Leave_type WHERE id=$1", leave.LeaveTypeID)
+
+		// Fetch approver's full name
+		var approverName string
+		s.Query.DB.Get(&approverName, "SELECT full_name FROM Tbl_Employee WHERE id=$1", approverID)
+
 		tx.Commit()
+
+		admins, err := s.Query.GetAdminAndEmployeeEmail(leave.EmployeeID)
+		if err != nil {
+			fmt.Printf("Failed to get admin and employee emails for notification: %v\n", err)
+		}
+
+		// Send final approval notification
+		if empDetails.Email != "" {
+			go func() {
+				utils.SendLeaveManagerApprovalEmail(
+					admins,
+					empDetails.Email,
+					empDetails.FullName,
+					leaveTypeName,
+					leave.StartDate.Format("2006-01-02"),
+					leave.EndDate.Format("2006-01-02"),
+					leave.Days,
+					approverName,
+				)
+			}()
+		}
 
 		c.JSON(200, gin.H{
 			"message": "Leave approved by manager. Pending final approval from ADMIN/SUPERADMIN",
@@ -616,11 +668,10 @@ func (s *HandlerFunc) ActionLeave(c *gin.Context) {
 		}
 
 		// Fetch employee details
-		var empDetails struct {
-			Email    string `db:"email"`
-			FullName string `db:"full_name"`
+		empDetails, err := s.Query.GetEmployeeDetailsForNotification(leave.EmployeeID)
+		if err != nil {
+			fmt.Printf("Failed to get employee details for notification: %v\n", err)
 		}
-		s.Query.DB.Get(&empDetails, "SELECT email, full_name FROM Tbl_Employee WHERE id=$1", leave.EmployeeID)
 
 		var leaveTypeName string
 		s.Query.DB.Get(&leaveTypeName, "SELECT name FROM Tbl_Leave_type WHERE id=$1", leave.LeaveTypeID)
@@ -631,10 +682,16 @@ func (s *HandlerFunc) ActionLeave(c *gin.Context) {
 
 		tx.Commit()
 
+		admins, err := s.Query.GetAdminAndEmployeeEmail(leave.EmployeeID)
+		if err != nil {
+			fmt.Printf("Failed to get admin and employee emails for notification: %v\n", err)
+		}
+
 		// Send final approval notification
 		if empDetails.Email != "" {
 			go func() {
-				utils.SendLeaveApprovalEmail(
+				utils.SendLeaveFinalApprovalEmail(
+					admins,
 					empDetails.Email,
 					empDetails.FullName,
 					leaveTypeName,
@@ -1354,25 +1411,25 @@ func (h *HandlerFunc) WithdrawLeave(c *gin.Context) {
 		}
 
 		// Fetch data BEFORE committing transaction
-		var empDetails struct {
-			Email    string `db:"email"`
-			FullName string `db:"full_name"`
-		}
-		err = h.Query.DB.Get(&empDetails, "SELECT email, full_name FROM Tbl_Employee WHERE id=$1", leave.EmployeeID)
+		empDetails, err := h.Query.GetEmployeeDetailsForNotification(leave.EmployeeID)
 		if err != nil {
-			fmt.Printf("❌ Failed to fetch employee details: %v\n", err)
+			fmt.Printf("Failed to fetch employee details: %v\n", err)
 		}
 
 		var leaveTypeName string
 		err = h.Query.DB.Get(&leaveTypeName, "SELECT name FROM Tbl_Leave_type WHERE id=$1", leave.LeaveTypeID)
 		if err != nil {
-			fmt.Printf("❌ Failed to fetch leave type: %v\n", err)
+			fmt.Printf("Failed to fetch leave type: %v\n", err)
 		}
 
 		var withdrawnByName string
 		err = h.Query.DB.Get(&withdrawnByName, "SELECT full_name FROM Tbl_Employee WHERE id=$1", currentUserID)
 		if err != nil {
-			fmt.Printf("❌ Failed to fetch withdrawn by name: %v\n", err)
+			fmt.Printf("Failed to fetch withdrawn by name: %v\n", err)
+		}
+		admins, err := h.Query.GetAdminAndEmployeeEmail(leave.EmployeeID)
+		if err != nil {
+			fmt.Printf("Failed to fetch admin and employee emails: %v\n", err)
 		}
 
 		// Commit transaction
@@ -1387,6 +1444,7 @@ func (h *HandlerFunc) WithdrawLeave(c *gin.Context) {
 			go func(email, name, leaveType, startDate, endDate string, days float64, withdrawnBy, withdrawnRole, reason string) {
 				fmt.Printf("📧 Sending withdrawal email to %s...\n", email)
 				err := utils.SendLeaveWithdrawalEmail(
+					admins,
 					email,
 					name,
 					leaveType,
