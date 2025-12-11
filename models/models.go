@@ -181,3 +181,17 @@ type DesignationInput struct {
 	DesignationName string  `json:"designation_name" validate:"required"`
 	Description     *string `json:"description,omitempty"`
 }
+
+// CompanySettings struct mapping the DB table
+type CompanySettings struct {
+	ID                   uuid.UUID `db:"id" json:"id"`
+	WorkingDaysPerMonth  int       `db:"working_days_per_month" json:"working_days_per_month"`
+	AllowManagerAddLeave bool      `db:"allow_manager_add_leave" json:"allow_manager_add_leave"`
+	CreatedAt            string    `db:"created_at" json:"created_at"`
+	UpdatedAt            string    `db:"updated_at" json:"updated_at"`
+}
+
+type CompanyField struct {
+	WorkingDaysPerMonth  int  `json:"working_days_per_month" binding:"required"`
+	AllowManagerAddLeave bool `json:"allow_manager_add_leave"`
+}

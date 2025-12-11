@@ -5,17 +5,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
+	"github.com/sanjayk-eng/UserMenagmentSystem_Backend/models"
 	"github.com/sanjayk-eng/UserMenagmentSystem_Backend/utils"
+	"github.com/sanjayk-eng/UserMenagmentSystem_Backend/utils/common"
+	"github.com/sanjayk-eng/UserMenagmentSystem_Backend/utils/constant"
 )
-
-// CompanySettings struct mapping the DB table
-type CompanySettings struct {
-	ID                   uuid.UUID `db:"id" json:"id"`
-	WorkingDaysPerMonth  int       `db:"working_days_per_month" json:"working_days_per_month"`
-	AllowManagerAddLeave bool      `db:"allow_manager_add_leave" json:"allow_manager_add_leave"`
-	CreatedAt            string    `db:"created_at" json:"created_at"`
-	UpdatedAt            string    `db:"updated_at" json:"updated_at"`
-}
 
 // GetCompanySettings - GET /api/settings/company
 func (h *HandlerFunc) GetCompanySettings(c *gin.Context) {
@@ -26,9 +21,8 @@ func (h *HandlerFunc) GetCompanySettings(c *gin.Context) {
 		utils.RespondWithError(c, 403, "Not authorized to view settings")
 		return
 	}
-
-	var settings CompanySettings
-	err := h.Query.DB.Get(&settings, `SELECT * FROM Tbl_Company_Settings LIMIT 1`)
+	var settings models.CompanySettings
+	err := h.Query.GetCompanySettings(settings)
 	if err != nil {
 		utils.RespondWithError(c, 500, "Failed to fetch settings: "+err.Error())
 		return
@@ -48,21 +42,45 @@ func (h *HandlerFunc) UpdateCompanySettings(c *gin.Context) {
 		utils.RespondWithError(c, 403, "Not authorized to update settings")
 		return
 	}
-
-	var input struct {
-		WorkingDaysPerMonth  int  `json:"working_days_per_month" binding:"required"`
-		AllowManagerAddLeave bool `json:"allow_manager_add_leave"`
-	}
+	var input models.CompanyField
 
 	if err := c.ShouldBindJSON(&input); err != nil {
 		utils.RespondWithError(c, 400, "Invalid input: "+err.Error())
 		return
 	}
+	empIDRaw, ok := c.Get("user_id")
+	if !ok {
+		utils.RespondWithError(c, http.StatusUnauthorized, "Employee ID missing")
+		return
 
-	_, err := h.Query.DB.Exec(`
-        UPDATE Tbl_Company_Settings
-        SET working_days_per_month=$1, allow_manager_add_leave=$2, updated_at=NOW()
-    `, input.WorkingDaysPerMonth, input.AllowManagerAddLeave)
+	}
+
+	empIDStr, ok := empIDRaw.(string)
+	if !ok {
+		utils.RespondWithError(c, http.StatusInternalServerError, "Invalid employee ID format")
+		return
+	}
+
+	empID, err := uuid.Parse(empIDStr)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, "Invalid employee UUID")
+		return
+	}
+
+	err = common.ExecuteTransaction(c, h.Query.DB, func(tx *sqlx.Tx) error {
+		err := h.Query.UpdateCompanySettings(tx, input)
+		if err != nil {
+			return utils.CustomErr(c, 500, "Failed to fetch settings: "+err.Error())
+		}
+		//add log
+		data := utils.NewCommon(constant.CompanySettings, constant.ActionCreate, empID)
+
+		err = common.AddLog(data, tx)
+		if err != nil {
+			return utils.CustomErr(c, http.StatusInternalServerError, "Failed to log action: "+err.Error())
+		}
+		return err
+	})
 
 	if err != nil {
 		utils.RespondWithError(c, 500, "Failed to update settings: "+err.Error())

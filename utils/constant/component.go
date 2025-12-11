@@ -8,4 +8,5 @@ const (
 	ComponentLeaveType    = "leave-type"
 	ComponentDesignation  = "designation"
 	ComponentLeaveBalance = "leave-balance"
+	CompanySettings       = "company-setting"
 )
