@@ -75,9 +75,13 @@ func (s *HandlerFunc) AddHoliday(c *gin.Context) {
 
 		return err
 	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"error":   err,
 		"message": "Holiday added successfully",
 		"id":      holidayId,
 		"date":    normalizedDate.Format("2006-01-02"),
@@ -118,40 +122,43 @@ func (s *HandlerFunc) DeleteHoliday(c *gin.Context) {
 	err := common.ExecuteTransaction(c, s.Query.DB, func(tx *sqlx.Tx) error {
 		err := s.Query.DeleteHoliday(id, tx)
 		if err != nil {
-			utils.RespondWithError(c, http.StatusInternalServerError, "Failed to delete holiday: "+err.Error())
-			return err
+			//utils.RespondWithError(c, http.StatusInternalServerError, "Failed to delete holiday: "+err.Error())
+			return utils.CustomErr(c, http.StatusInternalServerError, "Failed to delete holiday: "+err.Error())
+
 		}
 
 		//add log
 		empIDRaw, ok := c.Get("user_id")
 		if !ok {
-			utils.RespondWithError(c, http.StatusUnauthorized, "Employee ID missing")
-			return err
+			return utils.CustomErr(c, http.StatusUnauthorized, "Employee ID missing")
+
 		}
 
 		empIDStr, ok := empIDRaw.(string)
 		if !ok {
-			utils.RespondWithError(c, http.StatusInternalServerError, "Invalid employee ID format")
-			return err
+			return utils.CustomErr(c, http.StatusInternalServerError, "Invalid employee ID format")
 		}
 
 		empID, err := uuid.Parse(empIDStr)
 		if err != nil {
-			utils.RespondWithError(c, http.StatusInternalServerError, "Invalid employee UUID")
-			return err
+			return utils.CustomErr(c, http.StatusInternalServerError, "Invalid employee UUID")
 		}
 		data := utils.NewCommon(constant.ComponentHoliday, constant.ActionDelete, empID)
 
 		err = common.AddLog(data, tx)
 		if err != nil {
-			utils.RespondWithError(c, http.StatusInternalServerError, "Failed to log action: "+err.Error())
-			return err
+			return utils.CustomErr(c, http.StatusInternalServerError, "Failed to log action: "+err.Error())
 		}
 		return err
 	})
 
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": err.Error(),
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Holiday deleted successfully",
-		"error":   err.Error(),
 	})
 }
