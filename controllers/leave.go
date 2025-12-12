@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/sanjayk-eng/UserMenagmentSystem_Backend/models"
+	"github.com/sanjayk-eng/UserMenagmentSystem_Backend/service"
 	"github.com/sanjayk-eng/UserMenagmentSystem_Backend/utils"
 )
 
@@ -30,6 +31,269 @@ type Leave struct {
 }
 
 // ApplyLeave - POST /api/leaves/apply
+// func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
+// 	// Extract Employee Info from Middleware
+// 	empIDRaw, ok := c.Get("user_id")
+// 	if !ok {
+// 		utils.RespondWithError(c, http.StatusUnauthorized, "Employee ID missing")
+// 		return
+// 	}
+
+// 	empIDStr, ok := empIDRaw.(string)
+// 	if !ok {
+// 		utils.RespondWithError(c, http.StatusInternalServerError, "Invalid employee ID format")
+// 		return
+// 	}
+
+// 	employeeID, err := uuid.Parse(empIDStr)
+// 	if err != nil {
+// 		utils.RespondWithError(c, http.StatusInternalServerError, "Invalid employee UUID")
+// 		return
+// 	}
+
+// 	//role, ok := c.Get("role")
+// 	// if !ok  {
+// 	// 	utils.RespondWithError(c, http.StatusForbidden, "Only employees can apply leave")
+// 	// 	return
+// 	// }
+
+// 	// Validate Employee Status
+// 	var empStatus string
+// 	err = h.Query.DB.Get(&empStatus, `
+// 		SELECT status FROM Tbl_Employee WHERE id=$1
+// 	`, employeeID)
+
+// 	if err != nil {
+// 		utils.RespondWithError(c, 500, "Failed to verify employee status")
+// 		return
+// 	}
+
+// 	if empStatus == "deactive" {
+// 		utils.RespondWithError(c, 403, "Your account is deactivated. You cannot apply leave")
+// 		return
+// 	}
+
+// 	// Bind Input JSON
+// 	var input models.LeaveInput
+// 	if err := c.ShouldBindJSON(&input); err != nil {
+// 		utils.RespondWithError(c, http.StatusBadRequest, "Invalid input: "+err.Error())
+// 		return
+// 	}
+
+// 	input.EmployeeID = employeeID
+
+// 	// Validate reason - Enhanced validation
+// 	if input.Reason == "" {
+// 		utils.RespondWithError(c, 400, "Leave reason is required. Please provide a valid reason for your leave request")
+// 		return
+// 	}
+
+// 	// Trim whitespace and check minimum length
+// 	input.Reason = strings.TrimSpace(input.Reason)
+// 	if len(input.Reason) < 10 {
+// 		utils.RespondWithError(c, 400, "Leave reason must be at least 10 characters long. Please provide a detailed reason")
+// 		return
+// 	}
+
+// 	if len(input.Reason) > 500 {
+// 		utils.RespondWithError(c, 400, "Leave reason is too long. Maximum 500 characters allowed")
+// 		return
+// 	}
+
+// 	// Validate Date
+// 	today := time.Now().Truncate(24 * time.Hour)
+// 	if input.StartDate.Before(today) {
+// 		utils.RespondWithError(c, 400, "Start date cannot be earlier than today")
+// 		return
+// 	}
+
+// 	if input.EndDate.Before(input.StartDate) {
+// 		utils.RespondWithError(c, 400, "End date cannot be earlier than start date")
+// 		return
+// 	}
+
+// 	// Start Transaction
+// 	tx, err := h.Query.DB.Beginx()
+// 	if err != nil {
+// 		utils.RespondWithError(c, 500, "Failed to start transaction")
+// 		return
+// 	}
+// 	defer func() {
+// 		if err != nil {
+// 			tx.Rollback()
+// 		}
+// 	}()
+
+// 	// Calculate Working Days
+// 	leaveDays, err := service.CalculateWorkingDays(tx, input.StartDate, input.EndDate)
+// 	if err != nil {
+// 		utils.RespondWithError(c, 500, "Failed to calculate leave days: "+err.Error())
+// 		return
+// 	}
+// 	if leaveDays <= 0 {
+// 		utils.RespondWithError(c, 400, "Leave days must be greater than 0")
+// 		return
+// 	}
+// 	input.Days = &leaveDays
+
+// 	// Validate Leave Type
+// 	var leaveType struct {
+// 		DefaultEntitlement int `db:"default_entitlement"`
+// 	}
+// 	err = tx.Get(&leaveType,
+// 		"SELECT default_entitlement FROM Tbl_Leave_type WHERE id=$1",
+// 		input.LeaveTypeID,
+// 	)
+// 	if err == sql.ErrNoRows {
+// 		utils.RespondWithError(c, 400, "Invalid leave type")
+// 		return
+// 	}
+// 	if err != nil {
+// 		utils.RespondWithError(c, 500, "Failed to fetch leave type")
+// 		return
+// 	}
+
+// 	// Get/Create Leave Balance
+// 	var balance float64
+// 	err = tx.Get(&balance, `
+// 		SELECT closing
+// 		FROM Tbl_Leave_balance
+// 		WHERE employee_id=$1 AND leave_type_id=$2
+// 		AND year = EXTRACT(YEAR FROM CURRENT_DATE)
+// 	`, employeeID, input.LeaveTypeID)
+
+// 	if err == sql.ErrNoRows {
+// 		balance = float64(leaveType.DefaultEntitlement)
+
+// 		_, err = tx.Exec(`
+// 			INSERT INTO Tbl_Leave_balance
+// 				(employee_id, leave_type_id, year, opening, accrued, used, adjusted, closing)
+// 			VALUES ($1, $2, EXTRACT(YEAR FROM CURRENT_DATE), $3, 0, 0, 0, $3)
+// 		`, employeeID, input.LeaveTypeID, leaveType.DefaultEntitlement)
+// 		if err != nil {
+// 			utils.RespondWithError(c, 500, "Failed to create leave balance")
+// 			return
+// 		}
+// 	} else if err != nil {
+// 		utils.RespondWithError(c, 500, "Failed to fetch leave balance")
+// 		return
+// 	}
+
+// 	// Check Enough Leaves
+// 	if balance < leaveDays {
+// 		utils.RespondWithError(c, 400, "Insufficient leave balance")
+// 		return
+// 	}
+
+// 	// Overlapping Leave Check - Only check Pending and Approved leaves
+// 	var overlappingLeaves []struct {
+// 		ID        uuid.UUID `db:"id"`
+// 		LeaveType string    `db:"leave_type"`
+// 		StartDate time.Time `db:"start_date"`
+// 		EndDate   time.Time `db:"end_date"`
+// 		Status    string    `db:"status"`
+// 	}
+
+// 	err = tx.Select(&overlappingLeaves, `
+// 		SELECT l.id, lt.name as leave_type, l.start_date, l.end_date, l.status
+// 		FROM Tbl_Leave l
+// 		JOIN Tbl_Leave_type lt ON l.leave_type_id = lt.id
+// 		WHERE l.employee_id=$1
+// 		AND l.status IN ('Pending','APPROVED')
+// 		AND l.start_date <= $2
+// 		AND l.end_date >= $3
+// 	`, employeeID, input.EndDate, input.StartDate)
+
+// 	if err != nil {
+// 		utils.RespondWithError(c, 500, "Failed to check overlapping leave")
+// 		return
+// 	}
+
+// 	if len(overlappingLeaves) > 0 {
+// 		// Build detailed error message
+// 		overlap := overlappingLeaves[0]
+// 		utils.RespondWithError(c, 400,
+// 			fmt.Sprintf("Overlapping leave exists: %s from %s to %s (Status: %s). Please cancel or modify the existing leave first",
+// 				overlap.LeaveType,
+// 				overlap.StartDate.Format("2006-01-02"),
+// 				overlap.EndDate.Format("2006-01-02"),
+// 				overlap.Status))
+// 		return
+// 	}
+
+// 	// INSERT Leave with Reason
+// 	var leaveID uuid.UUID
+// 	err = tx.QueryRow(`
+// 		INSERT INTO Tbl_Leave
+// 		(employee_id, leave_type_id, start_date, end_date, days, status, reason)
+// 		VALUES ($1,$2,$3,$4,$5,'Pending',$6)
+// 		RETURNING id
+// 	`,
+// 		employeeID,
+// 		input.LeaveTypeID,
+// 		input.StartDate,
+// 		input.EndDate,
+// 		leaveDays,
+// 		input.Reason,
+// 	).Scan(&leaveID)
+
+// 	if err != nil {
+// 		utils.RespondWithError(c, 500, "Failed to apply leave: "+err.Error())
+// 		return
+// 	}
+
+// 	// Commit Transaction
+// 	err = tx.Commit()
+// 	if err != nil {
+// 		utils.RespondWithError(c, 500, "Failed to commit transaction")
+// 		return
+// 	}
+
+// 	// Send notification to manager/admin (async)
+// 	go func() {
+// 		// Get employee details
+
+// 		// Get leave type name
+// 		var leaveTypeName string
+// 		h.Query.DB.Get(&leaveTypeName, "SELECT name FROM Tbl_Leave_type WHERE id=$1", input.LeaveTypeID)
+
+// 		recipients, err := h.Query.GetAdminAndEmployeeEmail(employeeID)
+// 		if err != nil {
+// 			fmt.Printf("Failed to get notification recipients , email: %v\n", err)
+// 		}
+
+// 		empDetails, err := h.Query.GetEmployeeDetailsForNotification(employeeID)
+// 		if err != nil {
+// 			fmt.Printf("Failed to get employee details for notification: %v\n", err)
+// 		}
+// 		// Send notification to all recipients
+// 		if len(recipients) > 0 {
+// 			err := utils.SendLeaveApplicationEmail(
+// 				recipients,
+// 				empDetails.FullName,
+// 				leaveTypeName,
+// 				input.StartDate.Format("2006-01-02"),
+// 				input.EndDate.Format("2006-01-02"),
+// 				leaveDays,
+// 				input.Reason,
+// 			)
+// 			if err != nil {
+// 				fmt.Printf("Failed to send leave application email: %v\n", err)
+// 			}
+// 		}
+// 	}()
+
+// 	// Response
+// 	c.JSON(200, gin.H{
+// 		"message":  "Leave applied successfully",
+// 		"leave_id": leaveID,
+// 		"days":     leaveDays,
+// 		"reason":   input.Reason,
+// 	})
+// }
+
+// AdminAddLeave - POST /api/leaves/admin-add
+
 func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 	// Extract Employee Info from Middleware
 	empIDRaw, ok := c.Get("user_id")
@@ -50,23 +314,12 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 		return
 	}
 
-	//role, ok := c.Get("role")
-	// if !ok  {
-	// 	utils.RespondWithError(c, http.StatusForbidden, "Only employees can apply leave")
-	// 	return
-	// }
-
 	// Validate Employee Status
-	var empStatus string
-	err = h.Query.DB.Get(&empStatus, `
-		SELECT status FROM Tbl_Employee WHERE id=$1
-	`, employeeID)
-
+	empStatus, err := h.Query.GetEmployeeStatus(employeeID)
 	if err != nil {
 		utils.RespondWithError(c, 500, "Failed to verify employee status")
 		return
 	}
-
 	if empStatus == "deactive" {
 		utils.RespondWithError(c, 403, "Your account is deactivated. You cannot apply leave")
 		return
@@ -78,34 +331,29 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 		utils.RespondWithError(c, http.StatusBadRequest, "Invalid input: "+err.Error())
 		return
 	}
-
 	input.EmployeeID = employeeID
 
-	// Validate reason - Enhanced validation
+	// Validate Reason
+	input.Reason = strings.TrimSpace(input.Reason)
 	if input.Reason == "" {
 		utils.RespondWithError(c, 400, "Leave reason is required. Please provide a valid reason for your leave request")
 		return
 	}
-
-	// Trim whitespace and check minimum length
-	input.Reason = strings.TrimSpace(input.Reason)
 	if len(input.Reason) < 10 {
 		utils.RespondWithError(c, 400, "Leave reason must be at least 10 characters long. Please provide a detailed reason")
 		return
 	}
-
 	if len(input.Reason) > 500 {
 		utils.RespondWithError(c, 400, "Leave reason is too long. Maximum 500 characters allowed")
 		return
 	}
 
-	// Validate Date
+	// Validate Dates
 	today := time.Now().Truncate(24 * time.Hour)
 	if input.StartDate.Before(today) {
 		utils.RespondWithError(c, 400, "Start date cannot be earlier than today")
 		return
 	}
-
 	if input.EndDate.Before(input.StartDate) {
 		utils.RespondWithError(c, 400, "End date cannot be earlier than start date")
 		return
@@ -124,7 +372,7 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 	}()
 
 	// Calculate Working Days
-	leaveDays, err := CalculateWorkingDays(tx, input.StartDate, input.EndDate)
+	leaveDays, err := service.CalculateWorkingDays(tx, input.StartDate, input.EndDate)
 	if err != nil {
 		utils.RespondWithError(c, 500, "Failed to calculate leave days: "+err.Error())
 		return
@@ -136,13 +384,7 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 	input.Days = &leaveDays
 
 	// Validate Leave Type
-	var leaveType struct {
-		DefaultEntitlement int `db:"default_entitlement"`
-	}
-	err = tx.Get(&leaveType,
-		"SELECT default_entitlement FROM Tbl_Leave_type WHERE id=$1",
-		input.LeaveTypeID,
-	)
+	leaveType, err := h.Query.GetLeaveTypeById(input.LeaveTypeID)
 	if err == sql.ErrNoRows {
 		utils.RespondWithError(c, 400, "Invalid leave type")
 		return
@@ -153,23 +395,10 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 	}
 
 	// Get/Create Leave Balance
-	var balance float64
-	err = tx.Get(&balance, `
-		SELECT closing 
-		FROM Tbl_Leave_balance 
-		WHERE employee_id=$1 AND leave_type_id=$2 
-		AND year = EXTRACT(YEAR FROM CURRENT_DATE)
-	`, employeeID, input.LeaveTypeID)
-
+	balance, err := h.Query.GetLeaveBalance(tx, employeeID, input.LeaveTypeID)
 	if err == sql.ErrNoRows {
 		balance = float64(leaveType.DefaultEntitlement)
-
-		_, err = tx.Exec(`
-			INSERT INTO Tbl_Leave_balance 
-				(employee_id, leave_type_id, year, opening, accrued, used, adjusted, closing)
-			VALUES ($1, $2, EXTRACT(YEAR FROM CURRENT_DATE), $3, 0, 0, 0, $3)
-		`, employeeID, input.LeaveTypeID, leaveType.DefaultEntitlement)
-		if err != nil {
+		if err := h.Query.CreateLeaveBalance(tx, employeeID, input.LeaveTypeID, leaveType.DefaultEntitlement); err != nil {
 			utils.RespondWithError(c, 500, "Failed to create leave balance")
 			return
 		}
@@ -184,99 +413,63 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 		return
 	}
 
-	// Overlapping Leave Check - Only check Pending and Approved leaves
-	var overlappingLeaves []struct {
-		ID        uuid.UUID `db:"id"`
-		LeaveType string    `db:"leave_type"`
-		StartDate time.Time `db:"start_date"`
-		EndDate   time.Time `db:"end_date"`
-		Status    string    `db:"status"`
-	}
-
-	err = tx.Select(&overlappingLeaves, `
-		SELECT l.id, lt.name as leave_type, l.start_date, l.end_date, l.status
-		FROM Tbl_Leave l
-		JOIN Tbl_Leave_type lt ON l.leave_type_id = lt.id
-		WHERE l.employee_id=$1 
-		AND l.status IN ('Pending','APPROVED')
-		AND l.start_date <= $2 
-		AND l.end_date >= $3
-	`, employeeID, input.EndDate, input.StartDate)
-
+	// Overlapping Leave Check
+	overlaps, err := h.Query.GetOverlappingLeaves(tx, employeeID, input.StartDate, input.EndDate)
 	if err != nil {
 		utils.RespondWithError(c, 500, "Failed to check overlapping leave")
 		return
 	}
-
-	if len(overlappingLeaves) > 0 {
-		// Build detailed error message
-		overlap := overlappingLeaves[0]
-		utils.RespondWithError(c, 400,
-			fmt.Sprintf("Overlapping leave exists: %s from %s to %s (Status: %s). Please cancel or modify the existing leave first",
-				overlap.LeaveType,
-				overlap.StartDate.Format("2006-01-02"),
-				overlap.EndDate.Format("2006-01-02"),
-				overlap.Status))
+	if len(overlaps) > 0 {
+		ov := overlaps[0]
+		utils.RespondWithError(c, 400, fmt.Sprintf(
+			"Overlapping leave exists: %s from %s to %s (Status: %s). Please cancel or modify the existing leave first",
+			ov.LeaveType,
+			ov.StartDate.Format("2006-01-02"),
+			ov.EndDate.Format("2006-01-02"),
+			ov.Status,
+		))
 		return
 	}
 
-	// INSERT Leave with Reason
-	var leaveID uuid.UUID
-	err = tx.QueryRow(`
-		INSERT INTO Tbl_Leave 
-		(employee_id, leave_type_id, start_date, end_date, days, status, reason)
-		VALUES ($1,$2,$3,$4,$5,'Pending',$6)
-		RETURNING id
-	`,
-		employeeID,
-		input.LeaveTypeID,
-		input.StartDate,
-		input.EndDate,
-		leaveDays,
-		input.Reason,
-	).Scan(&leaveID)
-
+	// Insert Leave
+	leaveID, err := h.Query.InsertLeave(tx, employeeID, input.LeaveTypeID, input.StartDate, input.EndDate, leaveDays, input.Reason)
 	if err != nil {
 		utils.RespondWithError(c, 500, "Failed to apply leave: "+err.Error())
 		return
 	}
 
 	// Commit Transaction
-	err = tx.Commit()
-	if err != nil {
+	if err = tx.Commit(); err != nil {
 		utils.RespondWithError(c, 500, "Failed to commit transaction")
 		return
 	}
 
-	// Send notification to manager/admin (async)
+	// Send notification async
 	go func() {
-		// Get employee details
-
-		// Get leave type name
-		var leaveTypeName string
-		h.Query.DB.Get(&leaveTypeName, "SELECT name FROM Tbl_Leave_type WHERE id=$1", input.LeaveTypeID)
+		leaveType, _ := h.Query.GetLeaveTypeById(input.LeaveTypeID)
 
 		recipients, err := h.Query.GetAdminAndEmployeeEmail(employeeID)
 		if err != nil {
-			fmt.Printf("Failed to get notification recipients , email: %v\n", err)
+			fmt.Printf("Failed to get notification recipients: %v\n", err)
+			return
 		}
 
 		empDetails, err := h.Query.GetEmployeeDetailsForNotification(employeeID)
 		if err != nil {
 			fmt.Printf("Failed to get employee details for notification: %v\n", err)
+			return
 		}
-		// Send notification to all recipients
+
 		if len(recipients) > 0 {
-			err := utils.SendLeaveApplicationEmail(
+			if err := utils.SendLeaveApplicationEmail(
 				recipients,
 				empDetails.FullName,
-				leaveTypeName,
+				leaveType.Name,
 				input.StartDate.Format("2006-01-02"),
 				input.EndDate.Format("2006-01-02"),
 				leaveDays,
 				input.Reason,
-			)
-			if err != nil {
+			); err != nil {
 				fmt.Printf("Failed to send leave application email: %v\n", err)
 			}
 		}
@@ -291,7 +484,6 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 	})
 }
 
-// AdminAddLeave - POST /api/leaves/admin-add
 func (s *HandlerFunc) AdminAddLeavePolicy(c *gin.Context) {
 	roleValue, exists := c.Get("role")
 	if !exists {
@@ -351,16 +543,12 @@ func (s *HandlerFunc) AdminAddLeavePolicy(c *gin.Context) {
 }
 
 func (s *HandlerFunc) GetAllLeavePolicies(c *gin.Context) {
-	var leaves []models.LeaveType
-
-	query := `SELECT id, name, is_paid, default_entitlement,  created_at, updated_at FROM Tbl_Leave_type ORDER BY id`
-	err := s.Query.DB.Select(&leaves, query)
+	leaveType, err := s.Query.GetAllLeaveType()
 	if err != nil {
 		utils.RespondWithError(c, http.StatusInternalServerError, "Failed to fetch leave types: "+err.Error())
 		return
 	}
-
-	c.JSON(http.StatusOK, leaves) // send models directly
+	c.JSON(http.StatusOK, leaveType) // send models directly
 }
 
 // ActionLeave - POST /api/leaves/:id/action
