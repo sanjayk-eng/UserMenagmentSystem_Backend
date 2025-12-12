@@ -37,6 +37,20 @@ func (r *Repository) GetAllLeaveType() ([]models.LeaveType, error) {
 	return leaveType, err
 }
 
+// Admin add leave type
+
+func (r *Repository) AddLeaveType(tx *sqlx.Tx, input models.LeaveTypeInput) (models.LeaveType, error) {
+	var leave models.LeaveType
+	query := `
+		INSERT INTO Tbl_Leave_type (name, is_paid, default_entitlement)
+		VALUES ($1, $2, $3)
+		RETURNING id, created_at, updated_at
+	`
+	err := tx.QueryRow(query, input.Name, *input.IsPaid, *input.DefaultEntitlement).
+		Scan(&leave.ID, &leave.CreatedAt, &leave.UpdatedAt)
+	return leave, err
+}
+
 // 3. Get leave balance (inside TX)
 func (r *Repository) GetLeaveBalance(tx *sqlx.Tx, employeeID uuid.UUID, leaveTypeID int) (float64, error) {
 	var balance float64

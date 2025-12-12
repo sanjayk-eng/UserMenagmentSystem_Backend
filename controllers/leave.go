@@ -481,6 +481,24 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 }
 
 func (s *HandlerFunc) AdminAddLeavePolicy(c *gin.Context) {
+	// Extract Employee Info
+	empIDRaw, ok := c.Get("user_id")
+	if !ok {
+		utils.RespondWithError(c, http.StatusUnauthorized, "Employee ID missing")
+		return
+	}
+
+	empIDStr, ok := empIDRaw.(string)
+	if !ok {
+		utils.RespondWithError(c, http.StatusInternalServerError, "Invalid employee ID format")
+		return
+	}
+
+	employeeID, err := uuid.Parse(empIDStr)
+	if err != nil {
+		utils.RespondWithError(c, http.StatusInternalServerError, "Invalid employee UUID")
+		return
+	}
 	roleValue, exists := c.Get("role")
 	if !exists {
 		utils.RespondWithError(c, http.StatusInternalServerError, "failed to get role")
@@ -497,7 +515,6 @@ func (s *HandlerFunc) AdminAddLeavePolicy(c *gin.Context) {
 		utils.RespondWithError(c, http.StatusBadRequest, "Invalid input: "+err.Error())
 		return
 	}
-
 	// Set defaults
 	if input.IsPaid == nil {
 		defaultPaid := false
@@ -516,25 +533,35 @@ func (s *HandlerFunc) AdminAddLeavePolicy(c *gin.Context) {
 		utils.RespondWithError(c, http.StatusBadRequest, "leave_count must be greater than 0")
 		return
 	}
-
-	query := `
-		INSERT INTO Tbl_Leave_type (name, is_paid, default_entitlement)
-		VALUES ($1, $2, $3)
-		RETURNING id, created_at, updated_at
-	`
-
 	var leave models.LeaveType
-	err := s.Query.DB.QueryRow(query, input.Name, *input.IsPaid, *input.DefaultEntitlement).
-		Scan(&leave.ID, &leave.CreatedAt, &leave.UpdatedAt)
+
+	err = common.ExecuteTransaction(c, s.Query.DB, func(tx *sqlx.Tx) error {
+		Leave, err := s.Query.AddLeaveType(tx, input)
+		if err != nil {
+			return utils.CustomErr(c, http.StatusInternalServerError, "Failed to insert leave type: "+err.Error())
+		}
+		Leave.Name = input.Name
+		Leave.IsPaid = *input.IsPaid
+		Leave.DefaultEntitlement = *input.DefaultEntitlement
+		leave = Leave
+
+		// Log Entry
+		data := &utils.Common{
+			Component:  constant.ComponentLeaveType,
+			Action:     constant.ActionCreate,
+			FromUserID: employeeID,
+		}
+		if err := common.AddLog(data, tx); err != nil {
+			return utils.CustomErr(c, 500, "Failed to create leave log: "+err.Error())
+		}
+		return nil // IMPORTANT FIX
+	})
+
+	// If transaction returned an error, stop (CustomErr already responded)
 	if err != nil {
-		utils.RespondWithError(c, http.StatusInternalServerError, "Failed to insert leave type: "+err.Error())
+		utils.RespondWithError(c, 500, "Failed to update settings: "+err.Error())
 		return
 	}
-
-	leave.Name = input.Name
-	leave.IsPaid = *input.IsPaid
-	leave.DefaultEntitlement = *input.DefaultEntitlement
-
 	c.JSON(http.StatusOK, leave)
 }
 
