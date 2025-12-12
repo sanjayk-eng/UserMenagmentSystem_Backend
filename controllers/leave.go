@@ -465,7 +465,7 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 				leaveType.Name,
 				input.StartDate.Format("2006-01-02"),
 				input.EndDate.Format("2006-01-02"),
-				*input.Days,
+				Days,
 				input.Reason,
 			)
 		}
