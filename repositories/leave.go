@@ -9,7 +9,18 @@ import (
 )
 
 // 1. Get leave type entitlement
-func (r *Repository) GetLeaveTypeById(tx *sqlx.Tx, leaveTypeID int) (models.LeaveType, error) {
+func (r *Repository) GetLeaveTypeByIdTx(tx *sqlx.Tx, leaveTypeID int) (models.LeaveType, error) {
+	var leaves models.LeaveType
+	query := `SELECT id, name, is_paid, default_entitlement,  created_at, updated_at FROM Tbl_Leave_type WHERE id=$1`
+	err := tx.Get(&leaves,
+		query,
+		leaveTypeID,
+	)
+	return leaves, err
+}
+
+// 1. Get leave type entitlement
+func (r *Repository) GetLeaveTypeById(leaveTypeID int) (models.LeaveType, error) {
 	var leaves models.LeaveType
 	query := `SELECT id, name, is_paid, default_entitlement,  created_at, updated_at FROM Tbl_Leave_type WHERE id=$1`
 	err := r.DB.Get(&leaves,

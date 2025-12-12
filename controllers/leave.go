@@ -360,6 +360,7 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 
 	// Final Leave ID to return
 	var leaveID uuid.UUID
+	var Days float64
 
 	// Execute Transaction
 	err = common.ExecuteTransaction(c, h.Query.DB, func(tx *sqlx.Tx) error {
@@ -373,9 +374,10 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 			return utils.CustomErr(c, 400, "Leave days must be greater than 0")
 		}
 		input.Days = &leaveDays
+		Days = leaveDays
 
 		// Leave Type
-		leaveType, err := h.Query.GetLeaveTypeById(tx, input.LeaveTypeID)
+		leaveType, err := h.Query.GetLeaveTypeByIdTx(tx, input.LeaveTypeID)
 		if err == sql.ErrNoRows {
 			return utils.CustomErr(c, 400, "Invalid leave type")
 		}
@@ -441,11 +443,39 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 		return
 	}
 
+	go func() {
+		leaveType, _ := h.Query.GetLeaveTypeById(input.LeaveTypeID)
+
+		recipients, err := h.Query.GetAdminAndEmployeeEmail(employeeID)
+		if err != nil {
+			fmt.Printf("Failed to get notification recipients: %v\n", err)
+			return
+		}
+
+		empDetails, err := h.Query.GetEmployeeDetailsForNotification(employeeID)
+		if err != nil {
+			fmt.Printf("Failed to get employee details for notification: %v\n", err)
+			return
+		}
+
+		if len(recipients) > 0 {
+			utils.SendLeaveApplicationEmail(
+				recipients,
+				empDetails.FullName,
+				leaveType.Name,
+				input.StartDate.Format("2006-01-02"),
+				input.EndDate.Format("2006-01-02"),
+				*input.Days,
+				input.Reason,
+			)
+		}
+	}()
+
 	// Send response
 	c.JSON(200, gin.H{
 		"message":  "Leave applied successfully",
 		"leave_id": leaveID,
-		"days":     input.Days,
+		"days":     Days,
 		"reason":   input.Reason,
 	})
 }
