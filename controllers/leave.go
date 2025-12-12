@@ -365,7 +365,7 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 	//var leave string
 	var leaveID uuid.UUID
 
-	if err := common.ExecuteTransaction(c, h.Query.DB, func(tx *sqlx.Tx) error {
+	err = common.ExecuteTransaction(c, h.Query.DB, func(tx *sqlx.Tx) error {
 		//calculate Leave Days
 		leaveDays, err := service.CalculateWorkingDays(tx, input.StartDate, input.EndDate)
 		if err != nil {
@@ -376,22 +376,22 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 		}
 		input.Days = &leaveDays
 		// Validate Leave Type
-		leaveType, err := h.Query.GetLeaveTypeById(input.LeaveTypeID)
+		leaveType, err := h.Query.GetLeaveTypeById(tx, input.LeaveTypeID)
 		if err == sql.ErrNoRows {
-			return utils.CustomErr(c, 400, "Invalid leave type")
+			return utils.CustomErr(c, 400, "Invalid leave type "+err.Error())
 		}
 		if err != nil {
-			return utils.CustomErr(c, 500, "Failed to fetch leave type")
+			return utils.CustomErr(c, 500, "Failed to fetch leave type "+err.Error())
 		}
 		// Get/Create Leave Balance
 		balance, err := h.Query.GetLeaveBalance(tx, employeeID, input.LeaveTypeID)
 		if err == sql.ErrNoRows {
 			balance = float64(leaveType.DefaultEntitlement)
 			if err := h.Query.CreateLeaveBalance(tx, employeeID, input.LeaveTypeID, leaveType.DefaultEntitlement); err != nil {
-				return utils.CustomErr(c, 500, "Failed to create leave balance")
+				return utils.CustomErr(c, 500, "Failed to create leave balance "+err.Error())
 			}
 		} else if err != nil {
-			return utils.CustomErr(c, 500, "Failed to fetch leave balance")
+			return utils.CustomErr(c, 500, "Failed to fetch leave balance "+err.Error())
 		}
 
 		// Check Enough Leaves
@@ -401,7 +401,7 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 		// Overlapping Leave Check
 		overlaps, err := h.Query.GetOverlappingLeaves(tx, employeeID, input.StartDate, input.EndDate)
 		if err != nil {
-			return utils.CustomErr(c, 500, "Failed to check overlapping leave")
+			return utils.CustomErr(c, 500, "Failed to check overlapping leave "+err.Error())
 		}
 		if len(overlaps) > 0 {
 			ov := overlaps[0]
@@ -426,45 +426,47 @@ func (h *HandlerFunc) ApplyLeave(c *gin.Context) {
 		data.Action = constant.ActionCreate
 		data.FromUserID = employeeID
 		if err := common.AddLog(data, tx); err != nil {
+			fmt.Println("failed", err.Error())
 			return utils.CustomErr(c, 500, "Failed to create leave log : "+err.Error())
 		}
-		return err
-	}); err != nil {
+		// Send notification async
+		go func() {
+			leaveType, _ := h.Query.GetLeaveTypeById(tx, input.LeaveTypeID)
+
+			recipients, err := h.Query.GetAdminAndEmployeeEmail(employeeID)
+			if err != nil {
+				fmt.Printf("Failed to get notification recipients: %v\n", err)
+				return
+			}
+
+			empDetails, err := h.Query.GetEmployeeDetailsForNotification(employeeID)
+			if err != nil {
+				fmt.Printf("Failed to get employee details for notification: %v\n", err)
+				return
+			}
+
+			if len(recipients) > 0 {
+				if err := utils.SendLeaveApplicationEmail(
+					recipients,
+					empDetails.FullName,
+					leaveType.Name,
+					input.StartDate.Format("2006-01-02"),
+					input.EndDate.Format("2006-01-02"),
+					*input.Days,
+					input.Reason,
+				); err != nil {
+					fmt.Printf("Failed to send leave application email: %v\n", err)
+				}
+			}
+		}()
+		return nil
+	})
+
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"message": err.Error(),
 		})
 	}
-
-	// Send notification async
-	go func() {
-		leaveType, _ := h.Query.GetLeaveTypeById(input.LeaveTypeID)
-
-		recipients, err := h.Query.GetAdminAndEmployeeEmail(employeeID)
-		if err != nil {
-			fmt.Printf("Failed to get notification recipients: %v\n", err)
-			return
-		}
-
-		empDetails, err := h.Query.GetEmployeeDetailsForNotification(employeeID)
-		if err != nil {
-			fmt.Printf("Failed to get employee details for notification: %v\n", err)
-			return
-		}
-
-		if len(recipients) > 0 {
-			if err := utils.SendLeaveApplicationEmail(
-				recipients,
-				empDetails.FullName,
-				leaveType.Name,
-				input.StartDate.Format("2006-01-02"),
-				input.EndDate.Format("2006-01-02"),
-				*input.Days,
-				input.Reason,
-			); err != nil {
-				fmt.Printf("Failed to send leave application email: %v\n", err)
-			}
-		}
-	}()
 
 	// Response
 	c.JSON(200, gin.H{
