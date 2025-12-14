@@ -24,6 +24,9 @@ func SetupRoutes(r *gin.Engine, h *controllers.HandlerFunc) {
 	auth := r.Group("/api/auth")
 	{
 		auth.POST("/login", h.Login)
+		auth.GET("/verify", h.VerifyToken)                           // Verify token validity
+		auth.GET("/status", h.CheckAuthStatus)                       // Check auth status without requiring auth
+		auth.POST("/logout", middleware.AuthMiddleware(h), h.Logout) // Logout (requires valid token)
 	}
 
 	// ----------------- Employees -----------------
@@ -57,7 +60,7 @@ func SetupRoutes(r *gin.Engine, h *controllers.HandlerFunc) {
 		leaves.GET("/all", h.GetAllLeaves)                         // Get all leaves (filtered by role)
 		leaves.GET("/:id", h.GetLeaveByID)                         // Get leave by ID (role-based access)
 		leaves.GET("/timming", h.GetLeaveTiming)                   // Get all Leave Timing
-		leaves.PUT("/timming/:id", h.UpdateLeaveTiming)            // Update leave timing by super admin and admin
+		leaves.PUT("/timming", h.UpdateLeaveTiming)                // Update leave timing by super admin and admin
 	}
 
 	// ----------------- Leave Balances -----------------
