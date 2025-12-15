@@ -241,3 +241,65 @@ type UpdateLeaveTimingReq struct {
 type GetLeaveTimingByIDReq struct {
 	ID int `uri:"id" validate:"required,oneof=1 2 3"`
 }
+
+// EQUIPMENT
+
+type EquipmentCategoryRequest struct {
+	Name        string  `json:"name" validate:"required,min=2,max=50"`
+	Description *string `json:"description,omitempty" validate:"omitempty,max=255"`
+}
+type EquipmentCategoryRes struct {
+	ID          *string   `db:"id" json:"id,omitempty" validate:"omitempty,uuid4"`
+	Name        string    `db:"name" json:"name" validate:"required,min=2,max=50"`
+	Description string    `db:"description" json:"description,omitempty" validate:"omitempty,max=255"`
+	CreatedAt   time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt   time.Time `db:"updated_at" json:"updated_at"`
+}
+
+type EquipmentRequest struct {
+	ID            *string `json:"id,omitempty" validate:"omitempty,uuid4"`
+	Name          string  `json:"name" validate:"required,min=2,max=100"`
+	CategoryID    string  `json:"category_id" validate:"required,uuid4"`
+	Ownership     string  `json:"ownership,omitempty" validate:"omitempty,oneof=COMPANY SELF"`
+	IsShared      *bool   `json:"is_shared,omitempty"`
+	TotalQuantity int     `json:"total_quantity" validate:"required,min=0"`
+}
+
+type EquipmentRes struct {
+	ID            *string   `db:"id" json:"id,omitempty"`
+	Name          string    `db:"name" json:"name"`
+	CategoryID    string    `db:"category_id" json:"category_id"`
+	Ownership     string    `db:"ownership" json:"ownership"`
+	IsShared      bool      `db:"is_shared" json:"is_shared"`
+	TotalQuantity int       `db:"total_quantity" json:"total_quantity"`
+	CreatedAt     time.Time `db:"created_at" json:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at" json:"updated_at"`
+}
+
+// AssignEquipmentRequest - used when assigning equipment to an employee
+type AssignEquipmentRequest struct {
+	EmployeeID  uuid.UUID `json:"employee_id" validate:"required"`    // Employee to assign equipment
+	EquipmentID uuid.UUID `json:"equipment_id" validate:"required"`   // Equipment being assigned
+	Quantity    int       `json:"quantity" validate:"required,min=1"` // Quantity to assign
+}
+type AssignEquipmentResponse struct {
+	EmployeeName  string `json:"employee_name" db:"employee_name"`   // Name of employee
+	EmployeeEmail string `json:"employee_email" db:"employee_email"` // Email of employee
+	EquipmentName string `json:"equipment_name" db:"equipment_name"` // Equipment name
+	Ownership     string `json:"ownership" db:"ownership"`           // Ownership type (COMPANY or SELF)
+	Quantity      int    `json:"quantity" db:"quantity"`             // Assigned quantity
+}
+
+// RemoveEquipmentRequest - used when removing/returning equipment from an employee
+type RemoveEquipmentRequest struct {
+	EmployeeID  uuid.UUID `json:"employee_id" validate:"required"`  // Employee to remove equipment from
+	EquipmentID uuid.UUID `json:"equipment_id" validate:"required"` // Equipment being removed
+}
+
+// UpdateAssignmentRequest - used for both reassigning equipment and updating quantity
+type UpdateAssignmentRequest struct {
+	FromEmployeeID uuid.UUID  `json:"from_employee_id" validate:"required"` // Current employee
+	ToEmployeeID   *uuid.UUID `json:"to_employee_id,omitempty"`             // New employee (optional - if provided, it's reassignment)
+	EquipmentID    uuid.UUID  `json:"equipment_id" validate:"required"`     // Equipment being updated/reassigned
+	Quantity       int        `json:"quantity" validate:"required,min=1"`   // Quantity to update/reassign
+}

@@ -9,4 +9,7 @@ const (
 	ComponentDesignation  = "designation"
 	ComponentLeaveBalance = "leave-balance"
 	CompanySettings       = "company-setting"
+	EquipmentCategory     = "equipment-Category"
+	Equipment             = "equipment"
+	EquipmentAssign       = "equipment-assign"
 )

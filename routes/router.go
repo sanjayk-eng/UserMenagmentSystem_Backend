@@ -122,4 +122,38 @@ func SetupRoutes(r *gin.Engine, h *controllers.HandlerFunc) {
 	{
 		logs.GET("/", h.GetLogs) // Get logs filtered by days (SUPERADMIN only)
 	}
+	// Category routes
+	catagory := r.Group("/api/catagory")
+	catagory.Use(middleware.AuthMiddleware(h))
+	{
+		// ======================
+		// Category CRUD
+		// ======================
+		catagory.POST("/", h.CreateCategory)      // Create category (ADMIN, SUPERADMIN, HR)
+		catagory.GET("/", h.GetAllCategory)       // Get all categories (ADMIN, SUPERADMIN, HR)
+		catagory.DELETE("/:id", h.DeleteCategory) // Delete category (ADMIN, SUPERADMIN, HR)
+		catagory.PUT("/:id", h.UpdateCategory)    // Update category (ADMIN, SUPERADMIN, HR)
+
+		// ======================
+		// Equipment under category
+		// ======================
+		equipment := catagory.Group("/equipment")
+		{
+			equipment.POST("/", h.CreateEquipment)                  // Create equipment (ADMIN, SUPERADMIN, HR)
+			equipment.GET("/", h.GetAllEquipment)                   // Get all equipment (ADMIN, SUPERADMIN, HR)
+			equipment.GET("/by-category", h.GetEquipmentByCategory) // Get equipment by category ID (query param)
+			equipment.PUT("/:id", h.UpdateEquipment)                // Update equipment (ADMIN, SUPERADMIN, HR)
+			equipment.DELETE("/:id", h.DeleteEquipment)             // Delete equipment (ADMIN, SUPERADMIN, HR)
+		}
+		// Equipment assignment routes
+		assign := equipment.Group("/assign")
+		{
+			assign.POST("/", h.AssignEquipment)                           // Assign equipment
+			assign.GET("/", h.GetAllAssignedEquipment)                    // Get all assignments
+			assign.GET("/employee/:id", h.GetAssignedEquipmentByEmployee) // Get by employee id
+			assign.DELETE("/remove", h.RemoveEquipment)                   // Remove/return equipment
+			assign.PUT("/update", h.UpdateAssignment)                     // Update assignment (quantity or reassign)
+		}
+
+	}
 }
