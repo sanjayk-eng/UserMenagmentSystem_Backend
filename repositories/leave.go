@@ -300,3 +300,58 @@ func (r *Repository) GetAllLeave() ([]models.LeaveResponse, error) {
 	return result, err
 
 }
+
+// UpdateLeaveType - Update leave policy
+func (r *Repository) UpdateLeaveType(tx *sqlx.Tx, leaveTypeID int, input models.LeaveTypeInput) error {
+	query := `
+		UPDATE Tbl_Leave_type 
+		SET name = $1, is_paid = $2, default_entitlement = $3, updated_at = NOW()
+		WHERE id = $4
+	`
+	result, err := tx.Exec(query, input.Name, *input.IsPaid, *input.DefaultEntitlement, leaveTypeID)
+	if err != nil {
+		return err
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	
+	return nil
+}
+
+// DeleteLeaveType - Delete leave policy
+func (r *Repository) DeleteLeaveType(tx *sqlx.Tx, leaveTypeID int) error {
+	// Check if leave type is being used in any leave applications
+	var count int
+	err := tx.Get(&count, "SELECT COUNT(*) FROM Tbl_Leave WHERE leave_type_id = $1", leaveTypeID)
+	if err != nil {
+		return err
+	}
+	
+	if count > 0 {
+		return sql.ErrNoRows // Using this to indicate constraint violation
+	}
+	
+	query := `DELETE FROM Tbl_Leave_type WHERE id = $1`
+	result, err := tx.Exec(query, leaveTypeID)
+	if err != nil {
+		return err
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	
+	return nil
+}
